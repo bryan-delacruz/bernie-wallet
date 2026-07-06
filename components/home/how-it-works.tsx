@@ -1,4 +1,4 @@
-import { ArrowRight, Eye, Link2, Sparkles } from "lucide-react";
+import { ArrowRight, Eye, Link2, PencilLine, Sparkles } from "lucide-react";
 
 const STEPS = [
   {
@@ -32,8 +32,12 @@ export function HowItWorks() {
           </h2>
         </div>
 
-        {/* Micro-demo correo → gasto (apoyo, no protagonista) */}
-        <div className="mx-auto mt-12 flex max-w-lg flex-col items-center gap-3 sm:flex-row sm:gap-4">
+        {/* Micro-demo correo → gasto (apoyo, no protagonista).
+            aria-hidden: montos ilustrativos, no deben leerse como datos reales. */}
+        <div
+          aria-hidden
+          className="mx-auto mt-12 flex max-w-lg flex-col items-center gap-3 sm:flex-row sm:gap-4"
+        >
           <div className="w-full flex-1 rounded-xl border border-[#e8e4da] bg-[#f6f4ef] p-3.5">
             <p className="font-mono text-[11px] text-[#6b675b]">notificaciones@bcp.com.pe</p>
             <p className="mt-1 font-mono text-[12px] leading-snug text-[#17160f]/90">
@@ -70,6 +74,12 @@ export function HowItWorks() {
             </li>
           ))}
         </ol>
+
+        {/* Puente para quien no usa BCP (o paga en efectivo): el manual siempre existe */}
+        <p className="mx-auto mt-14 flex max-w-md items-center justify-center gap-2 text-center text-sm leading-relaxed text-pretty text-[#6b675b]">
+          <PencilLine className="size-4 shrink-0 text-[#a96e32]" />
+          ¿Un gasto en efectivo o de otro banco? Anótalo a mano en segundos.
+        </p>
       </div>
     </section>
   );

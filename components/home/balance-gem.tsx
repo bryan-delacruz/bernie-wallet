@@ -2,6 +2,7 @@
 export function BalanceGem() {
   return (
     <div
+      aria-hidden
       className="relative overflow-hidden rounded-3xl p-6 text-white shadow-[0_2px_4px_rgba(0,0,0,0.06),0_32px_64px_-20px_rgba(23,22,15,0.28),0_0_64px_-24px_rgba(14,124,88,0.4)]"
       style={{ background: "linear-gradient(150deg, #12946a 0%, #0e7c58 46%, #0a5540 100%)" }}
     >
