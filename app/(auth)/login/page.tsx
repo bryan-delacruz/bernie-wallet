@@ -21,7 +21,19 @@ const TRUST = [
   { icon: RotateCcw, label: "Reversible" },
 ];
 
-export default async function LoginPage() {
+// Mensajes por código de error que puede llegar del callback OAuth.
+const ERROR_MESSAGES: Record<string, string> = {
+  access_denied: "Cancelaste el acceso en Google. Puedes intentarlo de nuevo cuando quieras.",
+  auth: "No pudimos completar el inicio de sesión. Inténtalo de nuevo.",
+  missing_code: "No pudimos completar el inicio de sesión. Inténtalo de nuevo.",
+};
+const DEFAULT_ERROR = "Ocurrió un problema al iniciar sesión. Inténtalo de nuevo.";
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -30,6 +42,9 @@ export default async function LoginPage() {
   if (user) {
     redirect("/dashboard");
   }
+
+  const { error } = await searchParams;
+  const errorMessage = error ? (ERROR_MESSAGES[error] ?? DEFAULT_ERROR) : null;
 
   return (
     <main className="flex flex-1 lg:grid lg:grid-cols-[55fr_45fr]">
@@ -69,6 +84,15 @@ export default async function LoginPage() {
                 Conecta tu Gmail para registrar tus gastos.
               </p>
             </div>
+
+            {errorMessage && (
+              <p
+                role="alert"
+                className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                {errorMessage}
+              </p>
+            )}
 
             <GoogleSignInButton className="w-full" />
 

@@ -8,7 +8,12 @@ const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get("code");
+  const oauthError = searchParams.get("error");
 
+  // Google devuelve ?error=access_denied si el usuario cancela el consentimiento.
+  if (oauthError) {
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(oauthError)}`);
+  }
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);
   }
