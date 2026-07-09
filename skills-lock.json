@@ -25,6 +25,12 @@
       "skillPath": "plugins/developer-essentials/skills/error-handling-patterns/SKILL.md",
       "computedHash": "73f0570edd3ddc740ba5411932a67954df375530bbffbe7fa0cecd8e59b0711e"
     },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "781bd6d3f9b19f8c9af6b53d8d0e4876d0183841b565db34ca7092ffa412d111"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",
