@@ -104,3 +104,73 @@ export async function extractExpense(
     return null;
   }
 }
+
+// ── Modo descubrimiento: audita correos que los filtros estrictos NO capturan ──
+
+export type DiscoveryVerdict = {
+  is_expense: boolean;
+  confidence: string;
+  suggested_type: string;
+  suggested_subject: string;
+  reason: string;
+};
+
+const DISCOVERY_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    is_expense: {
+      type: "boolean",
+      description:
+        "true si el correo representa un GASTO/transacción personal donde el dinero SALE (consumo, pago de servicio, transferencia o yapeo enviado).",
+    },
+    confidence: { type: "string", enum: ["low", "medium", "high"] },
+    suggested_type: {
+      type: "string",
+      description:
+        "Si is_expense: 'credit_card_purchase' | 'debit_card_purchase' | 'service_payment' | 'yape' | 'transfer' | 'other'. '' si no es gasto.",
+    },
+    suggested_subject: {
+      type: "string",
+      description: "Frase clave del asunto que identificaría este correo, o '' si no es gasto.",
+    },
+    reason: { type: "string", description: "Motivo breve del veredicto." },
+  },
+  required: ["is_expense", "confidence", "suggested_type", "suggested_subject", "reason"],
+} as const;
+
+const DISCOVERY_GUIDE =
+  "Auditas correos bancarios del Perú (BCP/Yape) para detectar GASTOS que un filtro por " +
+  "asunto podría estar perdiendo. Es gasto si el dinero SALE del usuario: consumo con tarjeta, " +
+  "pago de servicio, transferencia o yapeo ENVIADO. NO son gasto: promociones, estados de cuenta, " +
+  "avisos de seguridad/login, abonos o transferencias RECIBIDAS, OTP. Si es gasto, sugiere el tipo " +
+  "y una frase clave del asunto que lo identifique.";
+
+/** Juzga un correo del banco no capturado por los filtros. Devuelve null si falla. */
+export async function classifyDiscovery(
+  text: string,
+  subject: string,
+  sender: string,
+): Promise<DiscoveryVerdict | null> {
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 512,
+    output_config: { format: { type: "json_schema", schema: DISCOVERY_SCHEMA } },
+    messages: [
+      {
+        role: "user",
+        content: `${DISCOVERY_GUIDE}\n\nRemitente: ${sender}\nAsunto: ${subject}\n\nCorreo:\n"""\n${text}\n"""`,
+      },
+    ],
+  });
+
+  if (response.stop_reason === "refusal") return null;
+  const textBlock = response.content.find((block) => block.type === "text");
+  if (!textBlock || textBlock.type !== "text") return null;
+
+  try {
+    return JSON.parse(textBlock.text) as DiscoveryVerdict;
+  } catch {
+    return null;
+  }
+}
