@@ -1,17 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Plus, RefreshCw } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { formatShortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const STEPS = [
-  "Leyendo tus correos…",
-  "Analizando con Bernie…",
-  "Registrando tus gastos…",
-];
-
+const STEPS = ["Leyendo tus correos…", "Analizando con Bernie…", "Registrando tus gastos…"];
 const SCOPE_HINT = "Revisa los últimos 30 días · hasta 100 correos";
 
 type SyncResult = {
@@ -45,22 +42,36 @@ function relativeFromNow(iso: string): string {
   if (hours < 24) return `hace ${hours} h`;
   const days = Math.round(hours / 24);
   if (days < 7) return `hace ${days} día${days > 1 ? "s" : ""}`;
-  return new Intl.DateTimeFormat("es-PE", { day: "2-digit", month: "short" }).format(
-    new Date(iso),
-  );
+  return new Intl.DateTimeFormat("es-PE", { day: "2-digit", month: "short" }).format(new Date(iso));
 }
 
-export function SyncButton({ lastSyncAt }: { lastSyncAt: string | null }) {
+/**
+ * Acciones del dashboard: "Agregar gasto" + "Sincronizar" en una fila pareja, y
+ * el estado del sync en una línea de ancho completo debajo (sin descuadrar).
+ */
+export function DashboardActions({
+  hasBank,
+  lastSyncAt,
+  coverageAt,
+}: {
+  hasBank: boolean;
+  /** Cuándo corrió el último sync (sync_logs.created_at). */
+  lastSyncAt: string | null;
+  /** Fecha del correo más nuevo ya cargado (sync_logs.last_sync_at). */
+  coverageAt?: string | null;
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [step, setStep] = useState(0);
 
-  const idleHint = lastSyncAt
-    ? `Última sincronización: ${relativeFromNow(lastSyncAt)}`
+  // Estado persistente: cuándo fue el último sync + hasta qué fecha está cargado.
+  const status = lastSyncAt
+    ? `Última sincronización: ${relativeFromNow(lastSyncAt)}${
+        coverageAt ? ` · cargado hasta ${formatShortDate(coverageAt)}` : ""
+      }`
     : SCOPE_HINT;
 
-  // Rota los mensajes de etapa mientras sincroniza (loading informativo).
   useEffect(() => {
     if (!loading) return;
     const timer = setInterval(() => setStep((i) => (i + 1) % STEPS.length), 2500);
@@ -90,21 +101,40 @@ export function SyncButton({ lastSyncAt }: { lastSyncAt: string | null }) {
   }
 
   return (
-    <div className="flex flex-1 flex-col">
-      <Button
-        type="button"
-        variant="outline"
-        size="lg"
-        onClick={sync}
-        disabled={loading}
-        className="h-11 w-full text-sm"
+    <div className="flex items-start gap-3">
+      <Link
+        href="/activity"
+        className={buttonVariants({ size: "lg", className: "h-11 flex-1 text-sm" })}
       >
-        <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-        {loading ? "Sincronizando…" : "Sincronizar"}
-      </Button>
-      <p className="mt-1.5 text-center text-[11px] text-muted-foreground/80">
-        {loading ? STEPS[step] : (message ?? idleHint)}
-      </p>
+        <Plus className="size-4" />
+        Agregar gasto
+      </Link>
+      {hasBank && (
+        <div className="flex flex-1 flex-col">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={sync}
+            disabled={loading}
+            className="h-11 w-full text-sm"
+          >
+            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+            {loading ? "Sincronizando…" : "Sincronizar"}
+          </Button>
+          <p className="mt-1.5 text-left text-[11px] leading-relaxed text-muted-foreground/80">
+            {loading ? (
+              STEPS[step]
+            ) : (
+              <>
+                {message && <span className="font-medium text-foreground/75">{message}</span>}
+                {message && " · "}
+                {status}
+              </>
+            )}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

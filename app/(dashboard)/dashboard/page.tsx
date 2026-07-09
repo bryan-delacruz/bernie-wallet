@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { Plus, ReceiptText } from "lucide-react";
+import { ReceiptText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { buttonVariants } from "@/components/ui/button";
 import { BalanceCard } from "@/components/dashboard/balance-card";
-import { SyncButton } from "@/components/dashboard/sync-button";
+import { DashboardActions } from "@/components/dashboard/dashboard-actions";
 import { formatCurrency, formatShortDate, limaMonthRange } from "@/lib/format";
 
 type ExpenseRow = {
@@ -29,7 +28,7 @@ export default async function DashboardPage() {
     await Promise.all([
       supabase
         .from("expenses")
-        .select("amount")
+        .select("amount, currency")
         .eq("user_id", user.id)
         .gte("occurred_at", startIso)
         .lt("occurred_at", endIso),
@@ -42,32 +41,40 @@ export default async function DashboardPage() {
       supabase.from("user_banks").select("id", { count: "exact", head: true }).eq("user_id", user.id),
       supabase
         .from("sync_logs")
-        .select("created_at")
+        .select("created_at, last_sync_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
     ]);
 
-  const total = (monthRows ?? []).reduce((sum, row) => sum + Number(row.amount), 0);
+  // Totales por moneda (no mezclar PEN y USD). PEN va primero como principal.
+  const byCurrency = new Map<string, number>();
+  for (const row of monthRows ?? []) {
+    const cur = row.currency ?? "PEN";
+    byCurrency.set(cur, (byCurrency.get(cur) ?? 0) + Number(row.amount));
+  }
+  const currencyOrder = ["PEN", "USD"];
+  const rank = (c: string) => {
+    const i = currencyOrder.indexOf(c);
+    return i === -1 ? 99 : i;
+  };
+  const totals = [...byCurrency.entries()]
+    .filter(([, amount]) => amount > 0)
+    .sort(([a], [b]) => rank(a) - rank(b))
+    .map(([currency, total]) => ({ currency, total }));
+  if (totals.length === 0) totals.push({ currency: "PEN", total: 0 });
+
   const expenses = (latest ?? []) as ExpenseRow[];
   const hasBank = (bankCount ?? 0) > 0;
   const lastSyncAt = lastSync?.created_at ?? null;
+  const coverageAt = lastSync?.last_sync_at ?? null;
 
   return (
     <div className="space-y-8">
-      <BalanceCard monthLabel={label} total={total} />
+      <BalanceCard monthLabel={label} totals={totals} />
 
-      <div className="flex gap-3">
-        <Link
-          href="/activity"
-          className={buttonVariants({ size: "lg", className: "h-11 flex-1 text-sm" })}
-        >
-          <Plus className="size-4" />
-          Agregar gasto
-        </Link>
-        {hasBank && <SyncButton lastSyncAt={lastSyncAt} />}
-      </div>
+      <DashboardActions hasBank={hasBank} lastSyncAt={lastSyncAt} coverageAt={coverageAt} />
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">

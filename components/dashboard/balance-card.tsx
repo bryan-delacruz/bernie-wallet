@@ -1,14 +1,18 @@
 import { PawMark } from "@/components/brand/paw-mark";
 import { formatCurrency } from "@/lib/format";
 
+export type CurrencyTotal = { currency: string; total: number };
+
 type BalanceCardProps = {
   monthLabel: string;
-  total: number;
-  currency?: string;
+  /** Totales por moneda. El primero es el principal (PEN); el resto, secundarios. */
+  totals: CurrencyTotal[];
 };
 
-/** Tarjeta de saldo "metálica" — pieza protagonista premium del dashboard. */
-export function BalanceCard({ monthLabel, total, currency = "PEN" }: BalanceCardProps) {
+/** Tarjeta de saldo "metálica" — pieza protagonista premium del dashboard. Bimoneda. */
+export function BalanceCard({ monthLabel, totals }: BalanceCardProps) {
+  const [primary = { currency: "PEN", total: 0 }, ...secondary] = totals;
+
   return (
     <div className="relative overflow-hidden rounded-2xl p-6 text-white shadow-[0_14px_34px_-14px_rgba(15,90,64,0.5)]">
       {/* Degradado esmeralda + brillo diagonal sutil (cue de tarjeta metálica) */}
@@ -42,8 +46,18 @@ export function BalanceCard({ monthLabel, total, currency = "PEN" }: BalanceCard
         Gastos · {monthLabel}
       </p>
       <p className="relative mt-1 text-4xl font-semibold tracking-tight tabular-nums">
-        {formatCurrency(total, currency)}
+        {formatCurrency(primary.total, primary.currency)}
       </p>
+
+      {secondary.length > 0 && (
+        <div className="relative mt-1.5 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+          {secondary.map((t) => (
+            <span key={t.currency} className="text-lg font-medium tabular-nums text-white/55">
+              {formatCurrency(t.total, t.currency)}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
