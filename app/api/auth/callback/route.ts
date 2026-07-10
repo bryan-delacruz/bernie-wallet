@@ -28,14 +28,17 @@ export async function GET(request: NextRequest) {
   const { user, session } = data;
 
   // Fila base de la cuenta: necesaria por el FK de google_tokens.
-  await supabase
+  const { error: userErr } = await supabase
     .from("users")
     .upsert({ id: user.id, email: user.email ?? "" }, { onConflict: "id" });
+  if (userErr) {
+    console.error("[callback] users upsert falló:", userErr.message);
+  }
 
   // Persistir el refresh_token de Google (cifrado) para sincronizar Gmail luego.
   const refreshToken = session.provider_refresh_token;
   if (refreshToken) {
-    await supabase.from("google_tokens").upsert(
+    const { error: tokErr } = await supabase.from("google_tokens").upsert(
       {
         user_id: user.id,
         encrypted_refresh_token: encrypt(refreshToken),
@@ -44,6 +47,9 @@ export async function GET(request: NextRequest) {
       },
       { onConflict: "user_id" },
     );
+    if (tokErr) {
+      console.error("[callback] google_tokens upsert falló:", tokErr.message);
+    }
   }
 
   // Categorías por defecto siempre disponibles (manual o sync).
