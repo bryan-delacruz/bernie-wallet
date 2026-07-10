@@ -259,6 +259,10 @@ Usuario presiona "Sincronizar"
          (si no matchea → descarte definitivo, se avanza el cursor)
       2. Pasar texto + tipo a Claude API → extraer datos del gasto
       3. payment_method_identifier → buscar o **auto-crear** medio de pago
+      3b. **Autocategorización:** subcategoría según la *memoria por comercio*
+          (aprendida de los últimos 2000 gastos ya categorizados; merchant normalizado
+          → subcategoría más frecuente). Sin IA; si el comercio no tiene historial,
+          queda sin categoría.
       4. Insertar en expenses (source = "sync"; occurred_at = fecha del correo)
       5. Avanzar el cursor hasta la fecha de este correo
   → Actualizar sync_logs (last_sync_at = fecha del último correo resuelto)

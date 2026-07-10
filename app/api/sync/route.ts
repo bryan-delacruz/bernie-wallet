@@ -143,6 +143,10 @@ export async function POST() {
     const known = await collectExistingIds(supabase, "expenses", user.id, allIds);
     const deadLettered = await collectExistingIds(supabase, "sync_failures", user.id, allIds);
 
+    // Autocategorización: memoria por comercio, aprendida de tus categorizaciones
+    // previas (una sola query, sin IA). merchant normalizado → subcategoría más usada.
+    const merchantMemory = await buildMerchantMemory(supabase, user.id);
+
     // Pendientes del MÁS VIEJO al MÁS NUEVO (Gmail los entrega al revés). El
     // cursor avanza en orden, así que parar en un fallo no deja huecos.
     const pendingAll = allIds
@@ -278,7 +282,7 @@ export async function POST() {
       const { error: insertError } = await supabase.from("expenses").insert({
         user_id: user.id,
         payment_method_id: paymentMethodId,
-        subcategory_id: null,
+        subcategory_id: merchantMemory.get(normMerchant(parsed.merchant || "")) ?? null,
         amount: parsed.amount,
         currency: parsed.currency || "PEN",
         merchant: parsed.merchant || "—",
@@ -390,6 +394,55 @@ export async function POST() {
     const message = error instanceof Error ? error.message : "Error al sincronizar.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+// Tope de la memoria por comercio: solo los N gastos categorizados más recientes
+// (evita escanear un historial enorme; prioriza tus categorizaciones recientes).
+const MERCHANT_MEMORY_LIMIT = 2000;
+
+/** Normaliza el comercio para agrupar variantes del mismo (mayúsculas, espacios). */
+function normMerchant(m: string): string {
+  return m.trim().toUpperCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Memoria por comercio: aprende de tus gastos ya categorizados. Devuelve
+ * `merchant normalizado → subcategoría más frecuente`. Una sola query, sin IA.
+ */
+async function buildMerchantMemory(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Map<string, string>> {
+  const { data } = await supabase
+    .from("expenses")
+    .select("merchant, subcategory_id")
+    .eq("user_id", userId)
+    .not("subcategory_id", "is", null)
+    .order("occurred_at", { ascending: false })
+    .limit(MERCHANT_MEMORY_LIMIT);
+
+  const counts = new Map<string, Map<string, number>>();
+  for (const row of data ?? []) {
+    if (!row.subcategory_id || !row.merchant) continue;
+    const key = normMerchant(row.merchant);
+    const inner = counts.get(key) ?? new Map<string, number>();
+    inner.set(row.subcategory_id, (inner.get(row.subcategory_id) ?? 0) + 1);
+    counts.set(key, inner);
+  }
+
+  const memory = new Map<string, string>();
+  for (const [key, inner] of counts) {
+    let best = "";
+    let bestN = 0;
+    for (const [sub, n] of inner) {
+      if (n > bestN) {
+        bestN = n;
+        best = sub;
+      }
+    }
+    if (best) memory.set(key, best);
+  }
+  return memory;
 }
 
 /** Subconjunto de `ids` que ya existe en `table` para el usuario, consultado en lotes. */
