@@ -138,6 +138,22 @@ export async function POST() {
     // Listamos TODOS los IDs nuevos (gratis); el tope caro se aplica al parsear.
     const allIds = await searchMessages(accessToken, query);
 
+    // Diagnóstico: si la búsqueda estricta no trae nada, comprobar si SÍ hay
+    // correos de esos remitentes (sin filtro de asunto). Distingue "no matchea el
+    // asunto" de "no hay correos". Solo corre cuando allIds=0 (barato).
+    console.log(`[sync] user=${user.id} estrictos=${allIds.length} query=${query}`);
+    if (allIds.length === 0) {
+      const wideQuery = `from:(${uniqueSenders.join(" OR ")}) after:${afterSeconds}`;
+      const wideIds = await searchMessages(accessToken, wideQuery);
+      console.log(`[sync][diag] soloRemitente=${wideIds.length} remitentes=${uniqueSenders.join(", ")}`);
+      if (wideIds.length > 0) {
+        const sample = await getMessage(accessToken, wideIds[0]).catch(() => null);
+        if (sample) {
+          console.log(`[sync][diag] muestra from="${sample.from}" subject="${sample.subject}"`);
+        }
+      }
+    }
+
     // Anti-duplicados (expenses) + dead-letter (sync_failures). En lotes para no
     // exceder el largo de la URL del filtro `in` cuando hay muchos correos.
     const known = await collectExistingIds(supabase, "expenses", user.id, allIds);
