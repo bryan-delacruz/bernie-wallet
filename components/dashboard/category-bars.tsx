@@ -33,6 +33,8 @@ export function CategoryBars({ items, currency }: { items: CategoryDatum[]; curr
         />
         <ChartTooltip
           cursor={false}
+          isAnimationActive={false}
+          wrapperStyle={{ transition: "none" }}
           content={
             <ChartTooltipContent formatter={(value) => formatCurrency(Number(value), currency)} />
           }

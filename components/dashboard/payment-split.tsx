@@ -25,6 +25,8 @@ export function PaymentSplit({ items, currency }: { items: SplitDatum[]; currenc
       <ChartContainer config={config} className="aspect-square h-[168px] shrink-0">
         <PieChart>
           <ChartTooltip
+            isAnimationActive={false}
+            wrapperStyle={{ transition: "none" }}
             content={
               <ChartTooltipContent
                 nameKey="label"

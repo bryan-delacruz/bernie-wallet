@@ -3,6 +3,7 @@ import { ReceiptText } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { BalanceCard } from "@/components/dashboard/balance-card";
 import { DashboardActions } from "@/components/dashboard/dashboard-actions";
+import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { StatTiles } from "@/components/dashboard/stat-tiles";
 import { CategoryBars } from "@/components/dashboard/category-bars";
 import { PaymentSplit } from "@/components/dashboard/payment-split";
@@ -11,8 +12,8 @@ import { formatCurrency, formatShortDate, limaMonthRange } from "@/lib/format";
 
 const LIMA_TZ = "America/Lima";
 const SECTION_TITLE = "text-sm font-semibold tracking-wide text-muted-foreground uppercase";
+const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
 
-// Medio de pago → etiqueta + color (tokens --chart-*), en orden fijo (categórico).
 const PAYMENT_META: Record<string, { label: string; color: string }> = {
   credit_card: { label: "TC", color: "var(--chart-1)" },
   debit_card: { label: "TD", color: "var(--chart-2)" },
@@ -21,6 +22,22 @@ const PAYMENT_META: Record<string, { label: string; color: string }> = {
 };
 const PAYMENT_ORDER = ["credit_card", "debit_card", "yape", "account", "none"];
 
+const limaDayStartIso = (day: string) => `${day}T05:00:00.000Z`;
+const limaDayFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: LIMA_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const limaMonthFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: LIMA_TZ,
+  year: "numeric",
+  month: "2-digit",
+});
+const fmtDay = (day: string) => formatShortDate(`${day}T12:00:00Z`);
+const daysBetween = (a: string, b: string) =>
+  Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+
 type ExpenseRow = {
   id: string;
   merchant: string;
@@ -28,30 +45,41 @@ type ExpenseRow = {
   currency: string;
   occurred_at: string;
   source: "sync" | "manual";
+  subcategory_id: string | null;
+  payment_method_id: string | null;
 };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string; cat?: string; method?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { startIso, endIso, label } = limaMonthRange(new Date());
+  const sp = await searchParams;
+  const from = sp.from ?? "";
+  const to = sp.to ?? "";
+  const method = sp.method ?? "";
+  const catIds = (sp.cat ?? "").split(",").filter(Boolean);
+  const hasDateFilter = Boolean(from || to);
+  const hasFilters = Boolean(from || to || method || catIds.length);
 
-  // Fecha en Lima (para KPIs y buckets del trend).
-  const nowParts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: LIMA_TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
+  // Fecha en Lima.
+  const now = new Date();
+  const nowParts = limaDayFmt.formatToParts(now);
   const curYear = Number(nowParts.find((p) => p.type === "year")!.value);
-  const curMonth = Number(nowParts.find((p) => p.type === "month")!.value); // 1-12
+  const curMonth = Number(nowParts.find((p) => p.type === "month")!.value);
   const curDay = Number(nowParts.find((p) => p.type === "day")!.value);
+  const todayLima = limaDayFmt.format(now);
   const daysInMonth = new Date(Date.UTC(curYear, curMonth, 0)).getUTCDate();
 
-  // Últimos 6 meses (del más viejo al actual). 00:00 Lima del 1er día = 05:00 UTC.
+  const { startIso: monthStartIso, endIso: monthEndIso, label: monthLabel } = limaMonthRange(now);
+
+  // Ventana del trend: últimos 6 meses (00:00 Lima del 1er día).
   const months = Array.from({ length: 6 }, (_, idx) => {
     const back = 5 - idx;
     const d = new Date(Date.UTC(curYear, curMonth - 1 - back, 1));
@@ -64,52 +92,69 @@ export default async function DashboardPage() {
   });
   const trailingStartIso = new Date(Date.UTC(curYear, curMonth - 6, 1, 5)).toISOString();
 
-  const [
-    { data: monthRows },
-    { data: trailingRows },
-    { data: latest },
-    { data: subs },
-    { data: cats },
-    { data: methods },
-    { count: bankCount },
-    { data: lastSync },
-  ] = await Promise.all([
-    supabase
-      .from("expenses")
-      .select("amount, currency, subcategory_id, payment_method_id")
-      .eq("user_id", user.id)
-      .gte("occurred_at", startIso)
-      .lt("occurred_at", endIso),
-    supabase
-      .from("expenses")
-      .select("amount, currency, occurred_at")
-      .eq("user_id", user.id)
-      .gte("occurred_at", trailingStartIso),
-    supabase
-      .from("expenses")
-      .select("id, merchant, amount, currency, occurred_at, source")
-      .eq("user_id", user.id)
-      .order("occurred_at", { ascending: false })
-      .limit(8),
-    supabase.from("subcategories").select("id, name, category_id").eq("user_id", user.id),
-    supabase.from("categories").select("id, name").eq("user_id", user.id),
-    supabase.from("payment_methods").select("id, type").eq("user_id", user.id),
-    supabase.from("user_banks").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-    supabase
-      .from("sync_logs")
-      .select("created_at, last_sync_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+  // Periodo del snapshot: rango de fechas si hay filtro, si no el mes actual.
+  const periodStartIso = hasDateFilter ? (from ? limaDayStartIso(from) : undefined) : monthStartIso;
+  let periodEndIso: string | undefined = hasDateFilter ? undefined : monthEndIso;
+  if (hasDateFilter && to) {
+    const n = new Date(limaDayStartIso(to));
+    n.setUTCDate(n.getUTCDate() + 1); // "hasta" inclusive
+    periodEndIso = n.toISOString();
+  }
+
+  // Referencia (para selects, join y filtro de categoría).
+  const [{ data: subs }, { data: cats }, { data: methods }, { count: bankCount }, { data: lastSync }] =
+    await Promise.all([
+      supabase.from("subcategories").select("id, name, category_id").eq("user_id", user.id),
+      supabase.from("categories").select("id, name").eq("user_id", user.id).order("name"),
+      supabase.from("payment_methods").select("id, type").eq("user_id", user.id),
+      supabase.from("user_banks").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase
+        .from("sync_logs")
+        .select("created_at, last_sync_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+  const subList = subs ?? [];
+  const subIds = catIds.length
+    ? subList.filter((s) => catIds.includes(s.category_id)).map((s) => s.id)
+    : null;
+  // Filtro por TIPO de medio (TC/TD/Yape/Cuenta) → ids de los medios de ese tipo.
+  const methodIdsForType = method
+    ? (methods ?? []).filter((m) => m.type === method).map((m) => m.id)
+    : null;
+
+  // Query del periodo (total, KPIs, desgloses, últimos) + query del trend (6 meses).
+  let periodQuery = supabase
+    .from("expenses")
+    .select("id, merchant, amount, currency, occurred_at, source, subcategory_id, payment_method_id")
+    .eq("user_id", user.id);
+  if (periodStartIso) periodQuery = periodQuery.gte("occurred_at", periodStartIso);
+  if (periodEndIso) periodQuery = periodQuery.lt("occurred_at", periodEndIso);
+  if (methodIdsForType)
+    periodQuery = periodQuery.in("payment_method_id", methodIdsForType.length ? methodIdsForType : [NO_MATCH_UUID]);
+  if (subIds) periodQuery = periodQuery.in("subcategory_id", subIds.length ? subIds : [NO_MATCH_UUID]);
+
+  let trendQuery = supabase
+    .from("expenses")
+    .select("amount, currency, occurred_at")
+    .eq("user_id", user.id)
+    .gte("occurred_at", trailingStartIso);
+  if (methodIdsForType)
+    trendQuery = trendQuery.in("payment_method_id", methodIdsForType.length ? methodIdsForType : [NO_MATCH_UUID]);
+  if (subIds) trendQuery = trendQuery.in("subcategory_id", subIds.length ? subIds : [NO_MATCH_UUID]);
+
+  const [{ data: periodRows }, { data: trendRows }] = await Promise.all([
+    periodQuery.order("occurred_at", { ascending: false }).limit(1000),
+    trendQuery,
   ]);
 
-  // Totales por moneda (no mezclar). PEN principal.
+  const rows = (periodRows ?? []) as ExpenseRow[];
+
+  // Totales por moneda (no mezclar). Principal = el primero.
   const byCurrency = new Map<string, number>();
-  for (const row of monthRows ?? []) {
-    const c = row.currency ?? "PEN";
-    byCurrency.set(c, (byCurrency.get(c) ?? 0) + Number(row.amount));
-  }
+  for (const r of rows) byCurrency.set(r.currency ?? "PEN", (byCurrency.get(r.currency ?? "PEN") ?? 0) + Number(r.amount));
   const order = ["PEN", "USD"];
   const rank = (c: string) => (order.indexOf(c) === -1 ? 99 : order.indexOf(c));
   const totals = [...byCurrency.entries()]
@@ -117,36 +162,31 @@ export default async function DashboardPage() {
     .sort(([a], [b]) => rank(a) - rank(b))
     .map(([currency, total]) => ({ currency, total }));
   if (totals.length === 0) totals.push({ currency: "PEN", total: 0 });
-
-  // Todos los desgloses van en la moneda principal (no mezclar PEN/USD).
   const cur = totals[0].currency;
-  const currentTotal = totals[0].total;
-  const primaryMonthRows = (monthRows ?? []).filter((r) => (r.currency ?? "PEN") === cur);
+  const periodTotal = totals[0].total;
+  const primaryRows = rows.filter((r) => (r.currency ?? "PEN") === cur);
 
   // Desglose por categoría (top 5 + otros).
   const catName = new Map((cats ?? []).map((c) => [c.id, c.name]));
-  const subToCat = new Map((subs ?? []).map((s) => [s.id, s.category_id as string]));
+  const subToCat = new Map(subList.map((s) => [s.id, s.category_id as string]));
   const byCategory = new Map<string, number>();
-  for (const r of primaryMonthRows) {
+  for (const r of primaryRows) {
     const catId = r.subcategory_id ? subToCat.get(r.subcategory_id) : null;
     const name = (catId && catName.get(catId)) || "Sin categoría";
     byCategory.set(name, (byCategory.get(name) ?? 0) + Number(r.amount));
   }
   const sortedCats = [...byCategory.entries()]
-    .map(([labelName, amount]) => ({ label: labelName, amount }))
+    .map(([label, amount]) => ({ label, amount }))
     .sort((a, b) => b.amount - a.amount);
   const categoryItems =
     sortedCats.length > 6
-      ? [
-          ...sortedCats.slice(0, 5),
-          { label: "Otros", amount: sortedCats.slice(5).reduce((s, i) => s + i.amount, 0) },
-        ]
+      ? [...sortedCats.slice(0, 5), { label: "Otros", amount: sortedCats.slice(5).reduce((s, i) => s + i.amount, 0) }]
       : sortedCats;
 
   // Desglose por medio de pago.
   const methodType = new Map((methods ?? []).map((m) => [m.id, m.type as string]));
   const byMethod = new Map<string, number>();
-  for (const r of primaryMonthRows) {
+  for (const r of primaryRows) {
     const type = r.payment_method_id ? methodType.get(r.payment_method_id) ?? "none" : "none";
     byMethod.set(type, (byMethod.get(type) ?? 0) + Number(r.amount));
   }
@@ -158,52 +198,73 @@ export default async function DashboardPage() {
       color: PAYMENT_META[i.type]?.color ?? "var(--muted-foreground)",
     }));
 
-  // Tendencia por mes (moneda principal); el mes actual usa el total exacto.
-  const monthKeyFmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: LIMA_TZ,
-    year: "numeric",
-    month: "2-digit",
-  });
+  // Tendencia (6 meses, moneda principal, respeta categoría/medio; ignora el rango).
   const monthIndex = new Map(months.map((m, i) => [m.key, i]));
-  for (const r of trailingRows ?? []) {
+  for (const r of trendRows ?? []) {
     if ((r.currency ?? "PEN") !== cur) continue;
-    const key = monthKeyFmt.format(new Date(r.occurred_at)).slice(0, 7);
-    const i = monthIndex.get(key);
+    const i = monthIndex.get(limaMonthFmt.format(new Date(r.occurred_at)).slice(0, 7));
     if (i !== undefined) months[i].total += Number(r.amount);
   }
-  months[5].total = currentTotal; // consistencia con la tarjeta
 
-  // KPIs + comparación mensual.
-  const prevTotal = months[4].total;
-  const deltaPct = prevTotal > 0 ? ((currentTotal - prevTotal) / prevTotal) * 100 : null;
-  const dailyAvg = currentTotal / Math.max(1, curDay);
-  const projection = dailyAvg * daysInMonth;
-  const movimientos = (monthRows ?? []).length;
+  // KPIs + comparación (solo en modo mes actual).
+  const movimientos = rows.length;
+  const lo = from || (primaryRows.length ? limaDayFmt.format(new Date(primaryRows[primaryRows.length - 1].occurred_at)) : todayLima);
+  const hi = to || todayLima;
+  const periodDays = hasDateFilter ? Math.max(1, daysBetween(lo, hi) + 1) : Math.max(1, curDay);
+  const dailyAvg = periodTotal / periodDays;
 
-  const expenses = (latest ?? []) as ExpenseRow[];
-  const hasBank = (bankCount ?? 0) > 0;
-  const hasMonthData = movimientos > 0;
+  let deltaPct: number | null = null;
+  let statTiles: { label: string; value: string; hint?: string }[];
+  if (hasDateFilter) {
+    statTiles = [
+      { label: "Movimientos", value: String(movimientos) },
+      { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
+    ];
+  } else {
+    const prevTotal = months[4].total;
+    deltaPct = prevTotal > 0 ? ((periodTotal - prevTotal) / prevTotal) * 100 : null;
+    statTiles = [
+      { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
+      { label: "Movimientos", value: String(movimientos) },
+      { label: "Proyección", value: formatCurrency(dailyAvg * daysInMonth, cur), hint: "fin de mes" },
+    ];
+  }
+
+  const periodLabel = !hasDateFilter
+    ? monthLabel
+    : from && to
+      ? `${fmtDay(from)} – ${fmtDay(to)}`
+      : from
+        ? `Desde ${fmtDay(from)}`
+        : `Hasta ${fmtDay(to)}`;
+
+  const hasData = movimientos > 0;
   const hasTrend = months.some((m) => m.total > 0);
+  const showFilters = hasData || hasFilters;
+  const recent = rows.slice(0, 8);
 
   return (
     <div className="space-y-8">
-      <BalanceCard monthLabel={label} totals={totals} deltaPct={deltaPct} />
+      <BalanceCard monthLabel={periodLabel} totals={totals} deltaPct={deltaPct} />
 
       <DashboardActions
-        hasBank={hasBank}
+        hasBank={(bankCount ?? 0) > 0}
         lastSyncAt={lastSync?.created_at ?? null}
         coverageAt={lastSync?.last_sync_at ?? null}
       />
 
-      {hasMonthData && (
+      {showFilters && (
+        <DashboardFilters
+          categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
+          methods={PAYMENT_ORDER.filter(
+            (t) => t !== "none" && (methods ?? []).some((m) => m.type === t),
+          ).map((t) => ({ id: t, label: PAYMENT_META[t].label }))}
+        />
+      )}
+
+      {hasData && (
         <>
-          <StatTiles
-            tiles={[
-              { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
-              { label: "Movimientos", value: String(movimientos) },
-              { label: "Proyección", value: formatCurrency(projection, cur), hint: "fin de mes" },
-            ]}
-          />
+          <StatTiles tiles={statTiles} />
 
           {categoryItems.length > 0 && (
             <section className="space-y-3">
@@ -236,28 +297,29 @@ export default async function DashboardPage() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className={SECTION_TITLE}>Últimos gastos</h2>
-          {expenses.length > 0 && (
+          <h2 className={SECTION_TITLE}>{hasFilters ? "Gastos del filtro" : "Últimos gastos"}</h2>
+          {recent.length > 0 && (
             <Link href="/activity" className="text-sm text-primary hover:underline">
               Ver todo
             </Link>
           )}
         </div>
 
-        {expenses.length === 0 ? (
+        {recent.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-12 text-center">
             <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
               <ReceiptText className="size-5" />
             </span>
-            <p className="font-medium">Aún no tienes gastos</p>
+            <p className="font-medium">{hasFilters ? "Sin resultados" : "Aún no tienes gastos"}</p>
             <p className="max-w-xs text-sm text-muted-foreground">
-              Agrega tu primer gasto a mano
-              {hasBank ? " o sincroniza tu banco" : ""}. Aparecerán aquí.
+              {hasFilters
+                ? "Ningún gasto coincide con estos filtros."
+                : `Agrega tu primer gasto a mano${(bankCount ?? 0) > 0 ? " o sincroniza tu banco" : ""}. Aparecerán aquí.`}
             </p>
           </div>
         ) : (
           <ul className="overflow-hidden rounded-xl border border-border bg-card">
-            {expenses.map((expense) => (
+            {recent.map((expense) => (
               <li
                 key={expense.id}
                 className="flex items-center gap-3 border-b border-border px-4 py-3.5 last:border-b-0"
@@ -269,7 +331,7 @@ export default async function DashboardPage() {
                     {expense.source === "manual" ? " · Manual" : ""}
                   </p>
                 </div>
-                <span className="text-sm font-semibold tabular-nums text-expense">
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-expense">
                   − {formatCurrency(Number(expense.amount), expense.currency)}
                 </span>
               </li>

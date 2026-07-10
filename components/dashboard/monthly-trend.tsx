@@ -37,6 +37,8 @@ export function MonthlyTrend({ months, currency }: { months: MonthDatum[]; curre
         />
         <ChartTooltip
           cursor={false}
+          isAnimationActive={false}
+          wrapperStyle={{ transition: "none" }}
           content={
             <ChartTooltipContent
               formatter={(value) => formatCurrency(Number(value), currency)}
