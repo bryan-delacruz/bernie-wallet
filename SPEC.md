@@ -336,6 +336,29 @@ ALCANCE (v0):
 
 ---
 
+## 11.1 Migraciones y ambientes (Supabase)
+
+Las migraciones (`supabase/migrations/*.sql`) son la **fuente de verdad del esquema** y se
+gestionan con la **Supabase CLI** (`supabase`, devDependency). Scripts:
+
+| Comando | Qué hace |
+|---|---|
+| `pnpm db:new <nombre>` | Crea un archivo de migración nuevo |
+| `pnpm db:status` | Lista migraciones locales vs. aplicadas en el proyecto enlazado |
+| `pnpm db:push` | Aplica las migraciones pendientes al proyecto enlazado |
+
+**Ambientes.** Durante el MVP se usa **una sola base** (mismo proyecto Supabase para local
+y producción), porque hay **un único usuario**. Implicación: esa base **es producción** — los
+scripts de reseteo borrarían datos reales; no correrlos salvo intención de vaciarla. Cuando el
+MVP esté listo, se separa en **dos proyectos** (`dev` y `prod`): se aplican las mismas
+migraciones a ambos y se agregan scripts `db:push:dev` / `db:push:prod` por connection string.
+
+**Bootstrap único** (el esquema ya estaba aplicado a mano): `supabase login` →
+`supabase link --project-ref <ref>` → `supabase migration repair --status applied 0001..0006`
+(registra como aplicadas las existentes sin re-ejecutarlas) → luego `pnpm db:push` para lo nuevo.
+
+---
+
 ## 12. Estructura del proyecto (objetivo, nombres en inglés)
 
 ```
