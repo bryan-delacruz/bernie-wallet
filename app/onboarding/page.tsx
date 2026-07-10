@@ -5,7 +5,12 @@ import { Button } from "@/components/ui/button";
 import { BernieLogoColor } from "@/components/brand/bernie-logo";
 import { completeOnboarding } from "./actions";
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -49,6 +54,16 @@ export default async function OnboardingPage() {
             disponible.
           </p>
         </div>
+
+        {error === "save" && (
+          <div
+            role="alert"
+            className="w-full rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          >
+            No pudimos guardar tu configuración. Inténtalo de nuevo; si el problema
+            persiste, vuelve a iniciar sesión.
+          </div>
+        )}
 
         <form action={completeOnboarding} className="flex w-full flex-col gap-4">
           <p className="text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase">
