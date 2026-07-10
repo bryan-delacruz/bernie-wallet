@@ -61,7 +61,10 @@ const TYPE_HINTS: Record<NotificationType, string> = {
     "('credit_card' si dice Tarjeta de crédito, 'debit_card' si Tarjeta de débito, " +
     "'account' si es una cuenta) y pon sus últimos 4 dígitos en payment_method_identifier como '****XXXX'.",
   yape:
-    "Yapeo. merchant = nombre del beneficiario; payment_method_identifier = celular enmascarado del origen; payment_source_type = 'yape'.",
+    "Yapeo que realizaste. merchant = nombre del beneficiario. " +
+    "payment_method_identifier = ÚNICAMENTE el celular que aparece como 'Tu número de celular' " +
+    "(tu propio celular, enmascarado). NUNCA el celular del beneficiario/destinatario. " +
+    "Si no aparece 'Tu número de celular', déjalo vacío. payment_source_type = 'yape'.",
   transfer:
     "Transferencia a terceros. merchant = nombre del beneficiario; payment_method_identifier = cuenta de origen (****XXXX) si aparece; payment_source_type = 'account' si es cuenta.",
 };

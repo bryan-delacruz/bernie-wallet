@@ -313,7 +313,7 @@ ALCANCE (v0):
 ### 10.1 Prompts por `notification_type`
 
 - **`credit_card_purchase` / `debit_card_purchase`**: extraer monto, moneda, comercio (campo "Empresa"), número de tarjeta (últimos 4 dígitos), fecha y hora, número de operación.
-- **`yape`**: extraer monto, moneda, nombre del beneficiario, celular del beneficiario (enmascarado), celular del yapero/origen (enmascarado), número de operación, fecha y hora.
+- **`yape`**: extraer monto, moneda, nombre del beneficiario, número de operación, fecha y hora. `payment_method_identifier` = **solo** el celular etiquetado como "Tu número de celular" (el del usuario, enmascarado); **nunca** el del beneficiario, para no crear medios de pago fantasma. Vacío si no aparece esa etiqueta.
 - **`service_payment`**: extraer monto, moneda, empresa, número de operación, número de documento (Doc. pago), fecha y hora. La "Cuenta de origen" puede ser **tarjeta de crédito, débito o cuenta** → clasificar en `payment_source_type` y poner sus últimos 4 dígitos en `payment_method_identifier`.
 - **`transfer`**: extraer monto, moneda, nombre del beneficiario, cuenta de origen (últimos 4 dígitos si aparece), número de operación, fecha y hora. (Sin medio de pago asociado.)
 
