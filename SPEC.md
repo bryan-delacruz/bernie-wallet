@@ -246,7 +246,7 @@ Categorías por defecto:
 ```
 Usuario presiona "Sincronizar"
   → (Límite free 1/día: PENDIENTE de activar; por ahora sin tope)
-  → Leer cursor (último last_sync_at; si no existe → hace 30 días)
+  → Leer cursor (último last_sync_at; si no existe → hace `SYNC_INITIAL_DAYS`, default 30)
   → Gmail API: query por remitente + asunto + fecha:
       from:(remitentes activos) subject:(subject_patterns) after:<cursor>
   → Listar TODOS los message_id que cumplen (paginando; listar es gratis).

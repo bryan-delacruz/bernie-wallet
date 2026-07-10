@@ -11,7 +11,10 @@ import {
 // Usa node:crypto (token), Anthropic SDK y Buffer → forzamos runtime Node.
 export const runtime = "nodejs";
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+// Ventana de la PRIMERA sincronización (cuando no hay cursor previo). Configurable
+// vía SYNC_INITIAL_DAYS para hacer backfill de correos antiguos. Default 30 días.
+const INITIAL_DAYS = Number(process.env.SYNC_INITIAL_DAYS) || 30;
+const INITIAL_WINDOW_MS = INITIAL_DAYS * 24 * 60 * 60 * 1000;
 
 // Máximo de correos a PARSEAR con Claude por sync (lo caro). Default 100.
 // La 1ª sincronización cubre los últimos 30 días (hasta este tope); si hubiera
@@ -120,10 +123,10 @@ export async function POST() {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    // 1ª vez (sin sync previo) → últimos 30 días. Luego → desde el último corte.
+    // 1ª vez (sin sync previo) → ventana inicial. Luego → desde el último corte.
     const cursorMs = lastSync?.last_sync_at
       ? new Date(lastSync.last_sync_at).getTime()
-      : Date.now() - THIRTY_DAYS_MS;
+      : Date.now() - INITIAL_WINDOW_MS;
     const afterSeconds = Math.floor(cursorMs / 1000);
 
     // Query de Gmail por remitentes únicos + fecha de corte.
