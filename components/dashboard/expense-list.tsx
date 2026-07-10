@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -145,7 +146,12 @@ function DeleteExpenseButton({ id, onDone }: { id: string; onDone: () => void })
       onClick={() => {
         if (!confirm("¿Eliminar este gasto?")) return;
         startTransition(async () => {
-          await deleteExpense(id);
+          const res = await deleteExpense(id);
+          if (res?.error) {
+            toast.error(res.error);
+            return;
+          }
+          toast.success("Gasto eliminado");
           onDone();
         });
       }}

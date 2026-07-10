@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Plus, Pencil, Trash2, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -147,6 +148,7 @@ function PaymentMethodForm({
       setError(result.error);
       return;
     }
+    toast.success(method ? "Medio actualizado" : "Medio agregado");
     onClose();
   }
 
@@ -230,7 +232,12 @@ function DeleteButton({ id }: { id: string }) {
       onClick={() => {
         if (!confirm("¿Eliminar este medio de pago?")) return;
         startTransition(async () => {
-          await deletePaymentMethod(id);
+          const res = await deletePaymentMethod(id);
+          if (res?.error) {
+            toast.error(res.error);
+            return;
+          }
+          toast.success("Medio eliminado");
         });
       }}
     >

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +26,12 @@ export function CategoriesManager({ categories }: { categories: Category[] }) {
     if (!name) return;
     startTransition(async () => {
       const res = await createCategory(name);
-      if (!res?.error) setNewName("");
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      setNewName("");
+      toast.success("Categoría creada");
     });
   }
 
@@ -78,15 +84,25 @@ function CategoryItem({ category }: { category: Category }) {
       return;
     }
     startTransition(async () => {
-      await renameCategory(category.id, value);
+      const res = await renameCategory(category.id, value);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
       setEditing(false);
+      toast.success("Categoría renombrada");
     });
   }
 
   function remove() {
     if (!confirm(`¿Eliminar "${category.name}" y sus subcategorías?`)) return;
     startTransition(async () => {
-      await deleteCategory(category.id);
+      const res = await deleteCategory(category.id);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Categoría eliminada");
     });
   }
 
@@ -95,7 +111,12 @@ function CategoryItem({ category }: { category: Category }) {
     if (!value) return;
     startTransition(async () => {
       const res = await createSubcategory(category.id, value);
-      if (!res?.error) setNewSub("");
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      setNewSub("");
+      toast.success("Subcategoría creada");
     });
   }
 
@@ -178,8 +199,13 @@ function SubcategoryRow({ subcategory }: { subcategory: Subcategory }) {
       return;
     }
     startTransition(async () => {
-      await renameSubcategory(subcategory.id, value);
+      const res = await renameSubcategory(subcategory.id, value);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
       setEditing(false);
+      toast.success("Subcategoría renombrada");
     });
   }
 
@@ -221,7 +247,12 @@ function SubcategoryRow({ subcategory }: { subcategory: Subcategory }) {
         variant="ghost"
         onClick={() =>
           startTransition(async () => {
-            await deleteSubcategory(subcategory.id);
+            const res = await deleteSubcategory(subcategory.id);
+            if (res?.error) {
+              toast.error(res.error);
+              return;
+            }
+            toast.success("Subcategoría eliminada");
           })
         }
         disabled={pending}

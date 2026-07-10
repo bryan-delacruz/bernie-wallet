@@ -55,6 +55,8 @@ El stack original solo declaraba `@supabase/supabase-js`. Estas dependencias son
 | `@anthropic-ai/sdk` | Cliente oficial para la **Claude API** que usa el parser. |
 | `next-themes` | **Modo oscuro** (light/dark/system) sin parpadeo y persistente, vía clase en `<html>`. Los tokens dark ya existen en `globals.css`. |
 | `lucide-react` | Íconos (viene con el preset Nova de shadcn/ui). |
+| `sonner` | **Toasts** (feedback de crear/editar/eliminar). Librería de toast oficial de shadcn/ui; ~5kb, accesible, temática con `next-themes`. |
+| `recharts` | **Gráficos del dashboard** (categorías, medios de pago, tendencia). Motor del componente `chart` de shadcn/ui; temático con los tokens `--chart-*`. |
 
 > **No se usa `googleapis`**: el acceso a Gmail se hace con **`fetch` nativo** (Node 22) contra la REST API. El cifrado del refresh token usa **`node:crypto`** nativo. No se instalan dependencias fuera de las listadas aquí.
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { toast } from "sonner";
 import { Landmark } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { connectBank, disconnectBank } from "@/app/(dashboard)/settings/actions";
@@ -12,8 +13,12 @@ export function BankSettings({ banks }: { banks: Bank[] }) {
 
   function toggle(bank: Bank, next: boolean) {
     startTransition(async () => {
-      if (next) await connectBank(bank.id, bank.name);
-      else await disconnectBank(bank.id);
+      const res = next ? await connectBank(bank.id, bank.name) : await disconnectBank(bank.id);
+      if (res?.error) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(next ? `${bank.name} conectado` : `${bank.name} desconectado`);
     });
   }
 
