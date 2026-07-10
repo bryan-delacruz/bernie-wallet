@@ -327,6 +327,7 @@ ALCANCE (v0):
 
 | Variable | Ámbito | Uso |
 |---|---|---|
+| `NEXT_PUBLIC_SITE_URL` | cliente + servidor | URL pública del sitio (OG/metadata + instalación PWA). Local: `http://localhost:3000`; prod: dominio HTTPS |
 | `NEXT_PUBLIC_SUPABASE_URL` | cliente + servidor | URL del proyecto Supabase |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | cliente + servidor | Publishable key (`sb_publishable_...`) — reemplaza a la antigua anon key; segura para el cliente |
 | `GOOGLE_CLIENT_ID` | servidor | Refrescar el access token de Gmail |
