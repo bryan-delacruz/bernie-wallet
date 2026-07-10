@@ -6,6 +6,7 @@ import {
   type PaymentMethod,
 } from "@/components/dashboard/payment-methods-settings";
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
+import { InstallApp } from "@/components/dashboard/install-app";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 
 const SECTION_TITLE = "text-sm font-semibold tracking-wide text-muted-foreground uppercase";
@@ -69,6 +70,11 @@ export default async function SettingsPage() {
       <section className="space-y-3">
         <h2 className={SECTION_TITLE}>Apariencia</h2>
         <ThemeToggle />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className={SECTION_TITLE}>Instalar app</h2>
+        <InstallApp />
       </section>
 
       <section className="space-y-3">

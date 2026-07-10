@@ -393,6 +393,15 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 > defecto (sin filtros) = **mes actual**. En desktop la barra de filtros es inline.
 > El dashboard usa `max-w-5xl` (saldo+KPIs y gráficos en 2 columnas); Activity y las
 > demás páginas quedan en columna legible (`max-w-2xl`).
+
+> **PWA (instalable en iOS/Android).** `app/manifest.ts` (display standalone,
+> start_url `/dashboard`, theme esmeralda). Iconos generados con `next/og`
+> `ImageResponse` (billetera marfil sobre esmeralda, mismo mark que el logo):
+> `app/apple-icon.tsx` (180) + route handlers `/icon-192`, `/icon-512`,
+> `/icon-maskable`; favicon en `app/icon.svg`. Meta de iOS vía `metadata.appleWebApp`.
+> Sin service worker (no se requiere para instalar). En Configuración, sección
+> **"Instalar app"** (`InstallApp`): botón nativo vía `beforeinstallprompt` en
+> Android/Chrome, instrucciones en iOS, oculto si ya está en modo standalone.
 9. **Categories**.
 10. **Settings**.
 11. **Gmail + Parser + Sync** (solo si eligió BCP).

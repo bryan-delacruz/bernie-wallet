@@ -33,6 +33,11 @@ export const metadata: Metadata = {
   },
   description: DESCRIPTION,
   applicationName: "Bernie Wallet",
+  appleWebApp: {
+    capable: true,
+    title: "Bernie",
+    statusBarStyle: "default",
+  },
   keywords: [
     "control de gastos",
     "finanzas personales",
