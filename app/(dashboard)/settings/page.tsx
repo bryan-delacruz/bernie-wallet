@@ -43,7 +43,7 @@ export default async function SettingsPage() {
   const methods = (paymentMethods ?? []) as PaymentMethod[];
 
   return (
-    <div className="space-y-9">
+    <div className="mx-auto w-full max-w-2xl space-y-9">
       <h1 className="font-heading text-2xl font-medium tracking-tight">Configuración</h1>
 
       <section className="space-y-3">

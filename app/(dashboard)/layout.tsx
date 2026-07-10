@@ -33,8 +33,8 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen">
       <DashboardNav />
-      <main className="px-5 pt-8 pb-24 md:pb-12 md:pl-[17rem]">
-        <div className="mx-auto w-full max-w-2xl">{children}</div>
+      <main className="overflow-x-clip px-5 pt-8 pb-24 md:pb-12 md:pl-[17rem]">
+        <div className="mx-auto w-full max-w-5xl">{children}</div>
       </main>
     </div>
   );

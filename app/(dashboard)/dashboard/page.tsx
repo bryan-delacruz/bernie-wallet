@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { ReceiptText } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { BalanceCard } from "@/components/dashboard/balance-card";
-import { DashboardActions } from "@/components/dashboard/dashboard-actions";
 import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { StatTiles } from "@/components/dashboard/stat-tiles";
 import { CategoryBars } from "@/components/dashboard/category-bars";
@@ -102,20 +103,11 @@ export default async function DashboardPage({
   }
 
   // Referencia (para selects, join y filtro de categoría).
-  const [{ data: subs }, { data: cats }, { data: methods }, { count: bankCount }, { data: lastSync }] =
-    await Promise.all([
-      supabase.from("subcategories").select("id, name, category_id").eq("user_id", user.id),
-      supabase.from("categories").select("id, name").eq("user_id", user.id).order("name"),
-      supabase.from("payment_methods").select("id, type").eq("user_id", user.id),
-      supabase.from("user_banks").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase
-        .from("sync_logs")
-        .select("created_at, last_sync_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  const [{ data: subs }, { data: cats }, { data: methods }] = await Promise.all([
+    supabase.from("subcategories").select("id, name, category_id").eq("user_id", user.id),
+    supabase.from("categories").select("id, name").eq("user_id", user.id).order("name"),
+    supabase.from("payment_methods").select("id, type").eq("user_id", user.id),
+  ]);
   const subList = subs ?? [];
   const subIds = catIds.length
     ? subList.filter((s) => catIds.includes(s.category_id)).map((s) => s.id)
@@ -241,17 +233,22 @@ export default async function DashboardPage({
   const hasData = movimientos > 0;
   const hasTrend = months.some((m) => m.total > 0);
   const showFilters = hasData || hasFilters;
-  const recent = rows.slice(0, 8);
+  const chartCount = (categoryItems.length > 0 ? 1 : 0) + (paymentItems.length > 0 ? 1 : 0);
 
   return (
-    <div className="space-y-8">
-      <BalanceCard monthLabel={periodLabel} totals={totals} deltaPct={deltaPct} />
+    <div className="space-y-6">
+      <h1 className="font-heading text-2xl font-medium tracking-tight">Resumen</h1>
 
-      <DashboardActions
-        hasBank={(bankCount ?? 0) > 0}
-        lastSyncAt={lastSync?.created_at ?? null}
-        coverageAt={lastSync?.last_sync_at ?? null}
-      />
+      {/* Hero: saldo + KPIs juntos en desktop. Sin datos, el saldo ocupa el ancho. */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <BalanceCard
+          monthLabel={periodLabel}
+          totals={totals}
+          deltaPct={deltaPct}
+          className={hasData ? "lg:col-span-1" : "lg:col-span-3"}
+        />
+        {hasData && <StatTiles tiles={statTiles} className="lg:col-span-2" />}
+      </section>
 
       {showFilters && (
         <DashboardFilters
@@ -262,83 +259,57 @@ export default async function DashboardPage({
         />
       )}
 
-      {hasData && (
+      {hasData ? (
         <>
-          <StatTiles tiles={statTiles} />
+          <div className={cn("grid grid-cols-1 gap-4", chartCount > 1 && "lg:grid-cols-2")}>
+            {categoryItems.length > 0 && (
+              <section className="space-y-3">
+                <h2 className={SECTION_TITLE}>A dónde va tu plata</h2>
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <CategoryBars items={categoryItems} currency={cur} />
+                </div>
+              </section>
+            )}
 
-          {categoryItems.length > 0 && (
-            <section className="space-y-3">
-              <h2 className={SECTION_TITLE}>A dónde va tu plata</h2>
-              <div className="rounded-xl border border-border bg-card p-4">
-                <CategoryBars items={categoryItems} currency={cur} />
-              </div>
-            </section>
-          )}
+            {paymentItems.length > 0 && (
+              <section className="space-y-3">
+                <h2 className={SECTION_TITLE}>Por medio de pago</h2>
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <PaymentSplit items={paymentItems} currency={cur} />
+                </div>
+              </section>
+            )}
+          </div>
 
-          {paymentItems.length > 0 && (
+          {hasTrend && (
             <section className="space-y-3">
-              <h2 className={SECTION_TITLE}>Por medio de pago</h2>
+              <h2 className={SECTION_TITLE}>Tendencia · 6 meses</h2>
               <div className="rounded-xl border border-border bg-card p-4">
-                <PaymentSplit items={paymentItems} currency={cur} />
+                <MonthlyTrend months={months} currency={cur} />
               </div>
             </section>
           )}
         </>
-      )}
-
-      {hasTrend && (
-        <section className="space-y-3">
-          <h2 className={SECTION_TITLE}>Tendencia · 6 meses</h2>
-          <div className="rounded-xl border border-border bg-card p-4">
-            <MonthlyTrend months={months} currency={cur} />
-          </div>
-        </section>
-      )}
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className={SECTION_TITLE}>{hasFilters ? "Gastos del filtro" : "Últimos gastos"}</h2>
-          {recent.length > 0 && (
-            <Link href="/activity" className="text-sm text-primary hover:underline">
-              Ver todo
+      ) : (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-16 text-center">
+          <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <BarChart3 className="size-5" />
+          </span>
+          <p className="font-medium">
+            {hasFilters ? "Sin resultados" : "Aún no hay datos que analizar"}
+          </p>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            {hasFilters
+              ? "Ningún gasto coincide con estos filtros."
+              : "Agrega o sincroniza tus gastos en Actividad y aquí verás tu resumen."}
+          </p>
+          {!hasFilters && (
+            <Link href="/activity" className={cn(buttonVariants({ size: "sm" }), "mt-1")}>
+              Ir a Actividad
             </Link>
           )}
         </div>
-
-        {recent.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border px-6 py-12 text-center">
-            <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <ReceiptText className="size-5" />
-            </span>
-            <p className="font-medium">{hasFilters ? "Sin resultados" : "Aún no tienes gastos"}</p>
-            <p className="max-w-xs text-sm text-muted-foreground">
-              {hasFilters
-                ? "Ningún gasto coincide con estos filtros."
-                : `Agrega tu primer gasto a mano${(bankCount ?? 0) > 0 ? " o sincroniza tu banco" : ""}. Aparecerán aquí.`}
-            </p>
-          </div>
-        ) : (
-          <ul className="overflow-hidden rounded-xl border border-border bg-card">
-            {recent.map((expense) => (
-              <li
-                key={expense.id}
-                className="flex items-center gap-3 border-b border-border px-4 py-3.5 last:border-b-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{expense.merchant}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatShortDate(expense.occurred_at)}
-                    {expense.source === "manual" ? " · Manual" : ""}
-                  </p>
-                </div>
-                <span className="shrink-0 text-sm font-semibold tabular-nums text-expense">
-                  − {formatCurrency(Number(expense.amount), expense.currency)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { PawMark } from "@/components/brand/paw-mark";
 import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export type CurrencyTotal = { currency: string; total: number };
 
@@ -9,14 +10,20 @@ type BalanceCardProps = {
   totals: CurrencyTotal[];
   /** Variación % del total principal vs. el mes pasado. null si no hay con qué comparar. */
   deltaPct?: number | null;
+  className?: string;
 };
 
 /** Tarjeta de saldo "metálica" — pieza protagonista premium del dashboard. Bimoneda. */
-export function BalanceCard({ monthLabel, totals, deltaPct }: BalanceCardProps) {
+export function BalanceCard({ monthLabel, totals, deltaPct, className }: BalanceCardProps) {
   const [primary = { currency: "PEN", total: 0 }, ...secondary] = totals;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl p-6 text-white shadow-[0_14px_34px_-14px_rgba(15,90,64,0.5)]">
+    <div
+      className={cn(
+        "relative flex flex-col overflow-hidden rounded-2xl p-6 text-white shadow-[0_14px_34px_-14px_rgba(15,90,64,0.5)]",
+        className,
+      )}
+    >
       {/* Degradado esmeralda + brillo diagonal sutil (cue de tarjeta metálica) */}
       <div
         aria-hidden

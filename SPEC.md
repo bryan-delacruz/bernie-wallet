@@ -379,8 +379,20 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 4. **Home** (pública).
 5. **Login** + callback OAuth + `lib/crypto.ts`.
 6. **Onboarding** (selección de banco / modo manual + seed de usuario).
-7. **Dashboard** (layout protegido + página).
-8. **Activity** (lista de gastos) + registro manual de gasto.
+7. **Dashboard** (layout protegido + página). Enfoque en **análisis**: saldo,
+   KPIs, gráficos (categoría, medio, tendencia). Con filtros y orden (ordenar el
+   desglose de categorías) para explorar los datos. **No** incluye registro manual
+   ni lista de movimientos (eso vive en Activity).
+8. **Activity** (lista de gastos): enfoque en **operar/encontrar**. Incluye
+   **Agregar gasto** (manual) y **Sincronizar** (con estado de última sync), más
+   filtros, búsqueda y **ordenamiento** de la lista (fecha ↕, monto ↕).
+
+> **Responsive (soporte desde 320px).** En móvil los filtros se colapsan en un
+> **bottom-sheet** (`components/ui/sheet.tsx`, sobre la primitiva Dialog de Base UI):
+> un botón "Filtros" con contador + los filtros activos como chips removibles; por
+> defecto (sin filtros) = **mes actual**. En desktop la barra de filtros es inline.
+> El dashboard usa `max-w-5xl` (saldo+KPIs y gráficos en 2 columnas); Activity y las
+> demás páginas quedan en columna legible (`max-w-2xl`).
 9. **Categories**.
 10. **Settings**.
 11. **Gmail + Parser + Sync** (solo si eligió BCP).

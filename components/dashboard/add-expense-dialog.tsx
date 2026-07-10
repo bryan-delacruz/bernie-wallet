@@ -16,21 +16,24 @@ import {
   type PaymentMethodOption,
 } from "@/components/dashboard/expense-form";
 import { createExpense } from "@/app/(dashboard)/activity/actions";
+import { cn } from "@/lib/utils";
 
 export type { CategoryOption };
 
 export function AddExpenseDialog({
   categories,
   paymentMethods,
+  className,
 }: {
   categories: CategoryOption[];
   paymentMethods: PaymentMethodOption[];
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button onClick={() => setOpen(true)} size="lg" className="h-11 text-sm">
+      <Button onClick={() => setOpen(true)} size="lg" className={cn("h-11 text-sm", className)}>
         <Plus className="size-4" />
         Agregar gasto
       </Button>

@@ -1,9 +1,11 @@
 import { ReceiptText, SearchX } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { AddExpenseDialog } from "@/components/dashboard/add-expense-dialog";
+import { SyncButton } from "@/components/dashboard/sync-button";
 import { ActivityFilters } from "@/components/dashboard/activity-filters";
 import { ExpenseList, type ExpenseRow } from "@/components/dashboard/expense-list";
 import type { CategoryOption, PaymentMethodOption } from "@/components/dashboard/expense-form";
+import { formatShortDate } from "@/lib/format";
 
 const TIPO_LABEL: Record<string, string> = {
   credit_card: "TC",
@@ -14,6 +16,14 @@ const TIPO_LABEL: Record<string, string> = {
 
 const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
 
+// Orden de la lista según el searchParam `sort` → columna + dirección.
+const SORT_ORDER: Record<string, { col: "occurred_at" | "amount"; asc: boolean }> = {
+  recent: { col: "occurred_at", asc: false },
+  oldest: { col: "occurred_at", asc: true },
+  "amount-desc": { col: "amount", asc: false },
+  "amount-asc": { col: "amount", asc: true },
+};
+
 // Un día "YYYY-MM-DD" a las 00:00 de Lima (UTC-5) como instante UTC.
 function limaDayStartIso(day: string): string {
   return `${day}T05:00:00.000Z`;
@@ -22,7 +32,14 @@ function limaDayStartIso(day: string): string {
 export default async function ActivityPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; from?: string; to?: string; cat?: string; method?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    from?: string;
+    to?: string;
+    cat?: string;
+    method?: string;
+    sort?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
@@ -31,6 +48,7 @@ export default async function ActivityPage({
   const method = sp.method ?? "";
   const catIds = (sp.cat ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const hasFilters = Boolean(q || from || to || method || catIds.length);
+  const order = SORT_ORDER[sp.sort ?? "recent"] ?? SORT_ORDER.recent;
 
   const supabase = await createClient();
   const {
@@ -38,13 +56,23 @@ export default async function ActivityPage({
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  // Datos de referencia (selects + join). Pequeños y en paralelo.
-  const [{ data: subs }, { data: methods }, { data: cats }] = await Promise.all([
-    supabase.from("subcategories").select("id, name, category_id").eq("user_id", user.id),
-    supabase.from("payment_methods").select("id, type, identifier, alias").eq("user_id", user.id),
-    supabase.from("categories").select("id, name").eq("user_id", user.id).order("name"),
-  ]);
+  // Datos de referencia (selects + join) + estado de sync. Pequeños y en paralelo.
+  const [{ data: subs }, { data: methods }, { data: cats }, { count: bankCount }, { data: lastSync }] =
+    await Promise.all([
+      supabase.from("subcategories").select("id, name, category_id").eq("user_id", user.id),
+      supabase.from("payment_methods").select("id, type, identifier, alias").eq("user_id", user.id),
+      supabase.from("categories").select("id, name").eq("user_id", user.id).order("name"),
+      supabase.from("user_banks").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase
+        .from("sync_logs")
+        .select("created_at, last_sync_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
   const subList = subs ?? [];
+  const hasBank = (bankCount ?? 0) > 0;
 
   // Gastos con filtros server-side (funciona más allá del tope y URLs compartibles).
   let query = supabase
@@ -66,7 +94,7 @@ export default async function ActivityPage({
   }
 
   const { data: rawExpenses } = await query
-    .order("occurred_at", { ascending: false })
+    .order(order.col, { ascending: order.asc })
     .limit(200);
 
   const subById = new Map(subList.map((s) => [s.id, s]));
@@ -105,11 +133,28 @@ export default async function ActivityPage({
   // Filtros visibles si hay gastos o hay un filtro activo (no en cuenta vacía).
   const showFilters = rows.length > 0 || hasFilters;
 
+  // Estado persistente del sync (fechas absolutas → sin desfase servidor/cliente).
+  const syncStatus = lastSync
+    ? `Última sincronización: ${formatShortDate(lastSync.created_at)}${
+        lastSync.last_sync_at ? ` · cargado hasta ${formatShortDate(lastSync.last_sync_at)}` : ""
+      }`
+    : "Revisa los últimos 30 días · hasta 100 correos";
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="font-heading text-2xl font-medium tracking-tight">Actividad</h1>
-        <AddExpenseDialog categories={categoryOptions} paymentMethods={paymentMethodOptions} />
+    <div className="mx-auto w-full max-w-2xl space-y-6">
+      <div className="space-y-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="font-heading text-2xl font-medium tracking-tight">Actividad</h1>
+          <div className="flex gap-2">
+            {hasBank && <SyncButton className="flex-1 sm:flex-none" />}
+            <AddExpenseDialog
+              categories={categoryOptions}
+              paymentMethods={paymentMethodOptions}
+              className="flex-1 sm:flex-none"
+            />
+          </div>
+        </div>
+        {hasBank && <p className="text-xs text-muted-foreground">{syncStatus}</p>}
       </div>
 
       {showFilters && (

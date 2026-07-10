@@ -21,7 +21,7 @@ export default async function CategoriesPage() {
     .order("name");
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-2xl space-y-6">
       <div className="space-y-1">
         <h1 className="font-heading text-2xl font-medium tracking-tight">Categorías</h1>
         <p className="text-sm text-muted-foreground">
