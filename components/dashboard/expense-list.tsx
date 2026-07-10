@@ -18,7 +18,6 @@ import {
 } from "@/components/dashboard/expense-form";
 import { updateExpense, deleteExpense } from "@/app/(dashboard)/activity/actions";
 import { formatCurrency, formatShortDate, toLimaDateInput } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 const TIPO_LABEL: Record<string, string> = {
   credit_card: "TC",
@@ -59,34 +58,27 @@ export function ExpenseList({
             <button
               type="button"
               onClick={() => setEditing(expense)}
-              className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50"
+              className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50 active:bg-muted"
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{expense.merchant}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                   <span>{formatShortDate(expense.occurred_at)}</span>
-                  <span className="rounded-full border border-border bg-muted px-2 py-px">
+                  <span className="rounded-full bg-muted px-2 py-0.5">
                     {expense.subcategories?.name ?? "Sin categoría"}
                   </span>
                   {expense.payment_methods && (
-                    <span className="rounded-full border border-border bg-muted px-2 py-px font-medium text-foreground/80">
+                    <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">
                       {TIPO_LABEL[expense.payment_methods.type] ?? expense.payment_methods.type}{" "}
                       {expense.payment_methods.identifier}
                     </span>
                   )}
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-px",
-                      expense.source === "sync"
-                        ? "bg-primary/10 text-primary"
-                        : "border border-border bg-muted",
-                    )}
-                  >
+                  <span className="rounded-full bg-muted px-2 py-0.5">
                     {expense.source === "sync" ? "Sync" : "Manual"}
                   </span>
                 </div>
               </div>
-              <span className="text-sm font-semibold tabular-nums text-expense">
+              <span className="shrink-0 text-sm font-semibold tabular-nums text-expense">
                 − {formatCurrency(Number(expense.amount), expense.currency)}
               </span>
             </button>
