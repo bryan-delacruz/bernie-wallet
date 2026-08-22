@@ -3,8 +3,18 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, LogOut } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 type SyncResult = {
@@ -31,10 +41,14 @@ function buildSummary({ nuevos, restantes = 0, descartados = 0, detenido }: Sync
 }
 
 /** Botón de sincronización. El progreso y el resultado se comunican por toast;
- *  el estado persistente (última sync / cobertura) lo renderiza la página. */
+ *  el estado persistente (última sync / cobertura) lo renderiza la página. Si el
+ *  acceso a Gmail se perdió (token/permiso), abre un modal para reconectar. */
 export function SyncButton({ className }: { className?: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  // Mensaje del error de acceso a Gmail; su presencia abre el modal de reconexión.
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
 
   async function sync() {
     setLoading(true);
@@ -43,7 +57,12 @@ export function SyncButton({ className }: { className?: string }) {
       const res = await fetch("/api/sync", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "No se pudo sincronizar.", { id });
+        if (data.code === "gmail_auth") {
+          toast.dismiss(id);
+          setAuthError(data.error ?? "Se perdió el acceso a Gmail.");
+        } else {
+          toast.error(data.error ?? "No se pudo sincronizar.", { id });
+        }
       } else if (data.message) {
         toast.info(data.message, { id });
       } else {
@@ -57,17 +76,47 @@ export function SyncButton({ className }: { className?: string }) {
     }
   }
 
+  async function signOut() {
+    setSigningOut(true);
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.replace("/login");
+  }
+
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="lg"
-      onClick={sync}
-      disabled={loading}
-      className={cn("h-11 text-sm", className)}
-    >
-      <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-      {loading ? "Sincronizando…" : "Sincronizar"}
-    </Button>
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        onClick={sync}
+        disabled={loading}
+        className={cn("h-11 text-sm", className)}
+      >
+        <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+        {loading ? "Sincronizando…" : "Sincronizar"}
+      </Button>
+
+      <Dialog open={authError !== null} onOpenChange={(open) => !open && setAuthError(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reconecta tu cuenta de Gmail</DialogTitle>
+            <DialogDescription>
+              Perdimos el acceso a tus correos, por eso no pudimos sincronizar. Cierra
+              sesión y vuelve a entrar para reconectar Gmail (recuerda dejar marcado el
+              permiso de lectura de correos). También puedes continuar sin reconectar y
+              seguir agregando gastos a mano.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="ghost" />}>Continuar</DialogClose>
+            <Button onClick={signOut} disabled={signingOut}>
+              <LogOut className="size-4" />
+              {signingOut ? "Cerrando sesión…" : "Cerrar sesión"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

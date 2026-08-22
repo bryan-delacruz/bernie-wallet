@@ -1,7 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic(); // lee ANTHROPIC_API_KEY del entorno
-const MODEL = "claude-haiku-4-5";
+// Parser programático de correos de notificación bancaria del Perú (BCP/Yape).
+// Las notificaciones son plantillas generadas por máquina: estructura fija, así
+// que extraemos los campos con regex sobre el texto normalizado. Sin IA: es
+// gratis, instantáneo y determinístico. Si un correo no matchea (p. ej. BCP
+// cambia la plantilla), el parser devuelve null y el sync lo manda a
+// `sync_failures` para revisarlo, sin perder nada silenciosamente.
 
 export type NotificationType =
   | "credit_card_purchase"
@@ -12,168 +14,189 @@ export type NotificationType =
 
 export type ParsedExpense = {
   amount: number;
-  currency: string;
+  currency: string; // "PEN" | "USD"
   merchant: string;
   payment_method_identifier: string;
-  payment_source_type: string;
+  payment_source_type: string; // credit_card | debit_card | account | yape | ""
   operation_number: string;
   document_number: string;
 };
 
-const SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    amount: { type: "number", description: "Monto del gasto, solo el número." },
-    currency: { type: "string", enum: ["PEN", "USD"], description: "Código de moneda." },
-    merchant: { type: "string", description: "Comercio o beneficiario." },
-    payment_method_identifier: {
-      type: "string",
-      description: "Identificador del medio (ej. ****2813, celular enmascarado). Vacío si no aplica.",
-    },
-    payment_source_type: {
-      type: "string",
-      description:
-        "Tipo del medio de origen: 'credit_card' (Tarjeta de crédito), 'debit_card' (Tarjeta de débito), 'account' (cuenta de ahorros/corriente), 'yape', o '' si no se indica.",
-    },
-    operation_number: { type: "string", description: "Número de operación. Vacío si no hay." },
-    document_number: { type: "string", description: "Número de documento. Vacío si no hay." },
-  },
-  required: [
-    "amount",
-    "currency",
-    "merchant",
-    "payment_method_identifier",
-    "payment_source_type",
-    "operation_number",
-    "document_number",
-  ],
-} as const;
+// Símbolo de moneda + monto. Perú usa coma de miles y punto decimal (1,234.56).
+const MONEY = String.raw`(S\/|US\$|\$)\s*([\d.,]+)`;
 
-const TYPE_HINTS: Record<NotificationType, string> = {
-  credit_card_purchase:
-    "Consumo con tarjeta de crédito. merchant = la 'Empresa'; payment_method_identifier = últimos 4 dígitos como '****XXXX'; payment_source_type = 'credit_card'.",
-  debit_card_purchase:
-    "Consumo con tarjeta de débito. merchant = la 'Empresa'; payment_method_identifier = últimos 4 dígitos como '****XXXX'; payment_source_type = 'debit_card'.",
-  service_payment:
-    "Pago de servicio. merchant = la empresa del servicio; document_number = Doc. pago. " +
-    "La 'Cuenta de origen' indica el medio usado: clasifícalo en payment_source_type " +
-    "('credit_card' si dice Tarjeta de crédito, 'debit_card' si Tarjeta de débito, " +
-    "'account' si es una cuenta) y pon sus últimos 4 dígitos en payment_method_identifier como '****XXXX'.",
-  yape:
-    "Yapeo que realizaste. merchant = nombre del beneficiario. " +
-    "payment_method_identifier = ÚNICAMENTE el celular que aparece como 'Tu número de celular' " +
-    "(tu propio celular, enmascarado). NUNCA el celular del beneficiario/destinatario. " +
-    "Si no aparece 'Tu número de celular', déjalo vacío. payment_source_type = 'yape'.",
-  transfer:
-    "Transferencia a terceros. merchant = nombre del beneficiario; payment_method_identifier = cuenta de origen (****XXXX) si aparece; payment_source_type = 'account' si es cuenta.",
-};
-
-const GUIDE =
-  "Eres un extractor de datos de correos de notificación bancaria del Perú (BCP/Yape). " +
-  "Devuelve solo los campos pedidos. Usa cadena vacía si un dato no aparece. " +
-  "currency debe ser 'PEN' (S/) o 'USD' ($).";
-
-/** Extrae los datos del gasto desde el texto del correo. Devuelve null si falla. */
-export async function extractExpense(
-  text: string,
-  notificationType: NotificationType,
-): Promise<ParsedExpense | null> {
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    output_config: { format: { type: "json_schema", schema: SCHEMA } },
-    messages: [
-      {
-        role: "user",
-        content: `${GUIDE}\n\nTipo de notificación: ${notificationType}\n${TYPE_HINTS[notificationType]}\n\nCorreo:\n"""\n${text}\n"""`,
-      },
-    ],
-  });
-
-  if (response.stop_reason === "refusal") return null;
-
-  const textBlock = response.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") return null;
-
-  try {
-    const parsed = JSON.parse(textBlock.text) as ParsedExpense;
-    if (!Number.isFinite(parsed.amount) || parsed.amount <= 0) return null;
-    // Normalizamos a un código ISO válido: si no es USD, asumimos PEN. Evita que
-    // un valor raro (ej. "Soles") rompa Intl.NumberFormat al formatear.
-    parsed.currency = parsed.currency?.toUpperCase() === "USD" ? "USD" : "PEN";
-    return parsed;
-  } catch {
-    return null;
-  }
+/**
+ * Normaliza el cuerpo del correo: quita el zero-width space y los \r, une los
+ * saltos de línea en espacios y colapsa espacios repetidos. Conserva los '*'
+ * porque forman parte de valores (comercios como "PYU*The Coffee") y de los
+ * marcadores de énfasis que usa el banco.
+ */
+function normalize(text: string): string {
+  return text
+    .replace(/\u200b/g, "")
+    .replace(/\r/g, "")
+    .replace(/\n/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .trim();
 }
 
-// ── Modo descubrimiento: audita correos que los filtros estrictos NO capturan ──
+/** Convierte "1,234.56" (formato peruano) a número; NaN si no aplica. */
+function parseAmount(raw: string): number {
+  return Number(raw.replace(/,/g, ""));
+}
 
-export type DiscoveryVerdict = {
-  is_expense: boolean;
-  confidence: string;
-  suggested_type: string;
-  suggested_subject: string;
-  reason: string;
-};
+/** Últimos 4 dígitos de un segmento con máscara (ignora '*', espacios y BIN). */
+function last4(segment: string): string {
+  const digits = segment.replace(/\D/g, "");
+  return digits.length >= 4 ? digits.slice(-4) : "";
+}
 
-const DISCOVERY_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    is_expense: {
-      type: "boolean",
-      description:
-        "true si el correo representa un GASTO/transacción personal donde el dinero SALE (consumo, pago de servicio, transferencia o yapeo enviado).",
-    },
-    confidence: { type: "string", enum: ["low", "medium", "high"] },
-    suggested_type: {
-      type: "string",
-      description:
-        "Si is_expense: 'credit_card_purchase' | 'debit_card_purchase' | 'service_payment' | 'yape' | 'transfer' | 'other'. '' si no es gasto.",
-    },
-    suggested_subject: {
-      type: "string",
-      description: "Frase clave del asunto que identificaría este correo, o '' si no es gasto.",
-    },
-    reason: { type: "string", description: "Motivo breve del veredicto." },
-  },
-  required: ["is_expense", "confidence", "suggested_type", "suggested_subject", "reason"],
-} as const;
+/** Moneda a partir del símbolo capturado: S/ → PEN; US$ o $ → USD. */
+function toCurrency(symbol: string): string {
+  return symbol.includes("S/") ? "PEN" : "USD";
+}
 
-const DISCOVERY_GUIDE =
-  "Auditas correos bancarios del Perú (BCP/Yape) para detectar GASTOS que un filtro por " +
-  "asunto podría estar perdiendo. Es gasto si el dinero SALE del usuario: consumo con tarjeta, " +
-  "pago de servicio, transferencia o yapeo ENVIADO. NO son gasto: promociones, estados de cuenta, " +
-  "avisos de seguridad/login, abonos o transferencias RECIBIDAS, OTP. Si es gasto, sugiere el tipo " +
-  "y una frase clave del asunto que lo identifique.";
-
-/** Juzga un correo del banco no capturado por los filtros. Devuelve null si falla. */
-export async function classifyDiscovery(
+/** Consumo con tarjeta de crédito/débito (misma plantilla, distinto rótulo). */
+function parseCardPurchase(
   text: string,
-  subject: string,
-  sender: string,
-): Promise<DiscoveryVerdict | null> {
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 512,
-    output_config: { format: { type: "json_schema", schema: DISCOVERY_SCHEMA } },
-    messages: [
-      {
-        role: "user",
-        content: `${DISCOVERY_GUIDE}\n\nRemitente: ${sender}\nAsunto: ${subject}\n\nCorreo:\n"""\n${text}\n"""`,
-      },
-    ],
-  });
+  tipo: "credit_card" | "debit_card",
+): ParsedExpense | null {
+  const label = tipo === "credit_card" ? "Crédito" : "Débito";
 
-  if (response.stop_reason === "refusal") return null;
-  const textBlock = response.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") return null;
+  const amountMatch =
+    text.match(new RegExp(`Monto Total del consumo\\s+${MONEY}`, "i")) ??
+    text.match(new RegExp(`consumo de\\s+${MONEY}`, "i"));
+  if (!amountMatch) return null;
+  const amount = parseAmount(amountMatch[2]);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
 
-  try {
-    return JSON.parse(textBlock.text) as DiscoveryVerdict;
-  } catch {
-    return null;
+  const merchant =
+    text.match(/Empresa\s+([\s\S]+?)\s+Número de operación/i)?.[1]?.trim() ?? "";
+  const cardSeg =
+    text.match(
+      new RegExp(`Número de Tarjeta de ${label}\\s+([\\*\\s\\d]+?)\\s+Empresa`, "i"),
+    )?.[1] ?? "";
+  const identifier = last4(cardSeg);
+  const operation = text.match(/Número de operación\s+(\d+)/i)?.[1] ?? "";
+
+  return {
+    amount,
+    currency: toCurrency(amountMatch[1]),
+    merchant,
+    payment_method_identifier: identifier ? `****${identifier}` : "",
+    payment_source_type: tipo,
+    operation_number: operation,
+    document_number: "",
+  };
+}
+
+/** Pago de servicio (Banca Móvil): el medio de origen lo indica el propio correo. */
+function parseServicePayment(text: string): ParsedExpense | null {
+  const amountMatch = text.match(new RegExp(`Monto total:\\s*\\*?\\s*${MONEY}`, "i"));
+  if (!amountMatch) return null;
+  const amount = parseAmount(amountMatch[2]);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const merchant = text.match(/Empresa:\s*\*([^*]+?)\*/i)?.[1]?.trim() ?? "";
+  const operation = text.match(/Número de operación:\s*\*?\s*(\d+)/i)?.[1] ?? "";
+  const document = text.match(/Doc\.\s*pago:\s*\*([^*]+?)\*/i)?.[1]?.trim() ?? "";
+
+  // "Cuenta de origen: *<medio> **** 1234 <nombre>*" hasta "Vigencia:".
+  const originSeg =
+    text.match(/Cuenta de origen:\s*\*?([\s\S]*?)\s*Vigencia:/i)?.[1] ?? "";
+  let source = "account";
+  if (/tarjeta de cr[eé]dito/i.test(originSeg)) source = "credit_card";
+  else if (/tarjeta de d[eé]bito/i.test(originSeg)) source = "debit_card";
+  const identifier = last4(originSeg);
+
+  return {
+    amount,
+    currency: toCurrency(amountMatch[1]),
+    merchant,
+    payment_method_identifier: identifier ? `****${identifier}` : "",
+    payment_source_type: source,
+    operation_number: operation,
+    document_number: document,
+  };
+}
+
+/** Yapeo enviado. Ojo: el medio es "Tu número de celular", NO el del beneficiario. */
+function parseYape(text: string): ParsedExpense | null {
+  const amountMatch = text.match(new RegExp(`Monto de yapeo[\\s*]*${MONEY}`, "i"));
+  if (!amountMatch) return null;
+  const amount = parseAmount(amountMatch[2]);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const merchant =
+    text
+      .match(/Nombre del Beneficiario\s+([\s\S]+?)\s+N[ºo°]\s*de operaci[óo]n/i)?.[1]
+      ?.replace(/\*+$/, "")
+      .trim() ?? "";
+  const phone = text.match(/Tu número de celular\s+(\S+)/i)?.[1] ?? "";
+  const operation = text.match(/N[ºo°]\s*de operaci[óo]n\s+(\d+)/i)?.[1] ?? "";
+
+  const phoneDigits = phone.replace(/\D/g, "");
+  const identifier = phoneDigits ? `***${phoneDigits.slice(-3)}` : "";
+
+  return {
+    amount,
+    currency: toCurrency(amountMatch[1]),
+    merchant,
+    payment_method_identifier: identifier,
+    payment_source_type: "yape",
+    operation_number: operation,
+    document_number: "",
+  };
+}
+
+/** Transferencia a terceros BCP: sale de una cuenta (sin tarjeta). */
+function parseTransfer(text: string): ParsedExpense | null {
+  const amountMatch =
+    text.match(new RegExp(`Monto transferido\\s*\\*?\\s*${MONEY}`, "i")) ??
+    text.match(new RegExp(`transferencia de\\s*\\*?\\s*${MONEY}`, "i"));
+  if (!amountMatch) return null;
+  const amount = parseAmount(amountMatch[2]);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const merchant = text.match(/Enviado a\s*\*([^*]+?)\*/i)?.[1]?.trim() ?? "";
+  const operation = text.match(/Número de operación\s*\*?\s*(\d+)/i)?.[1] ?? "";
+  // "Desde *<cuenta>* **** 1234" → los últimos 4 de la cuenta de origen.
+  const originSeg = text.match(/Desde\s*\*[^*]+\*\s*([\*\s\d]+)/i)?.[1] ?? "";
+  const identifier = last4(originSeg);
+
+  return {
+    amount,
+    currency: toCurrency(amountMatch[1]),
+    merchant,
+    payment_method_identifier: identifier ? `****${identifier}` : "",
+    payment_source_type: "account",
+    operation_number: operation,
+    document_number: "",
+  };
+}
+
+/**
+ * Extrae los datos del gasto desde el texto del correo según su tipo. Es puro y
+ * determinístico (sin red, sin IA). Devuelve null si el correo no matchea la
+ * plantilla esperada → el sync lo trata como no parseable.
+ */
+export function extractExpense(
+  text: string,
+  notificationType: NotificationType,
+): ParsedExpense | null {
+  const t = normalize(text);
+  switch (notificationType) {
+    case "credit_card_purchase":
+      return parseCardPurchase(t, "credit_card");
+    case "debit_card_purchase":
+      return parseCardPurchase(t, "debit_card");
+    case "service_payment":
+      return parseServicePayment(t);
+    case "yape":
+      return parseYape(t);
+    case "transfer":
+      return parseTransfer(t);
+    default:
+      return null;
   }
 }

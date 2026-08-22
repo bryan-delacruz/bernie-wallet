@@ -6,7 +6,7 @@
 
 ## 1. Objetivo
 
-Bernie Wallet es una app web de **registro de gastos personales**. Lee correos de notificación bancaria desde Gmail, extrae los datos del gasto con la **Claude API**, y los guarda en **Supabase**. El usuario también puede registrar gastos manualmente.
+Bernie Wallet es una app web de **registro de gastos personales**. Lee correos de notificación bancaria desde Gmail, extrae los datos del gasto con un **parser programático (regex, sin IA)**, y los guarda en **Supabase**. El usuario también puede registrar gastos manualmente.
 
 ## 2. Alcance actual (v0)
 
@@ -52,7 +52,6 @@ El stack original solo declaraba `@supabase/supabase-js`. Estas dependencias son
 | Dependencia | Por qué |
 |---|---|
 | `@supabase/ssr` | Patrón oficial de Supabase para **auth con cookies en App Router** (server components, route handlers, `proxy.ts`). |
-| `@anthropic-ai/sdk` | Cliente oficial para la **Claude API** que usa el parser. |
 | `next-themes` | **Modo oscuro** (light/dark/system) sin parpadeo y persistente, vía clase en `<html>`. Los tokens dark ya existen en `globals.css`. |
 | `lucide-react` | Íconos (viene con el preset Nova de shadcn/ui). |
 | `sonner` | **Toasts** (feedback de crear/editar/eliminar). Librería de toast oficial de shadcn/ui; ~5kb, accesible, temática con `next-themes`. |
@@ -253,11 +252,11 @@ Usuario presiona "Sincronizar"
   → Filtrar: quitar los ya importados (anti-duplicado) y los descartados
     (sync_failures.attempts >= MAX_ATTEMPTS).
   → Ordenar del MÁS VIEJO al MÁS NUEVO y tomar solo `SYNC_MAX_RESULTS` por
-    corrida (el tope limita el parseo caro con Claude, no la cobertura).
+    corrida (el tope acota el número de correos leídos por corrida, no la cobertura).
   → Por cada correo (del más viejo al más nuevo):
       1. Detectar notification_type por sender + subject_pattern
          (si no matchea → descarte definitivo, se avanza el cursor)
-      2. Pasar texto + tipo a Claude API → extraer datos del gasto
+      2. Pasar texto + tipo al parser programático → extraer datos del gasto
       3. payment_method_identifier → buscar o **auto-crear** medio de pago
       3b. **Autocategorización:** subcategoría según la *memoria por comercio*
           (aprendida de los últimos 2000 gastos ya categorizados; merchant normalizado
@@ -290,15 +289,20 @@ ALCANCE (v0):
 
 ---
 
-## 10. Parser de extracción (Claude API)
+## 10. Parser de extracción (programático, sin IA)
 
-- Modelo: **`claude-haiku-4-5`** vía `@anthropic-ai/sdk`.
-- Salida forzada con **structured outputs** (`output_config.format`, json_schema) — contrato (campos en inglés):
+Los correos de notificación de BCP/Yape son **plantillas generadas por máquina**:
+estructura fija y rótulos estables. Por eso el parser (`lib/parser/parser-service.ts`)
+es **programático** — extrae los campos con **regex** sobre el texto normalizado del
+correo. Es gratis, instantáneo y determinístico; **no usa ninguna API de IA**.
+
+- Función pura: `extractExpense(text, notificationType) → ParsedExpense | null`.
+- Contrato (campos en inglés):
 
 ```json
 {
   "amount": number,
-  "currency": string,
+  "currency": "PEN | USD",
   "merchant": string,
   "payment_method_identifier": string,
   "payment_source_type": "credit_card | debit_card | account | yape | ''",
@@ -312,14 +316,24 @@ ALCANCE (v0):
   cuenta; el sync usa este valor (no un mapeo fijo) para asociar/crear el medio, así
   un pago de servicio con la TC ****2813 se une al mismo medio que sus consumos.
 
-- `max_tokens` ~1024. Validar `stop_reason` antes de leer el contenido.
+- **Fallback / red de seguridad**: si un correo no matchea la plantilla esperada
+  (p. ej. el banco cambia el formato), `extractExpense` devuelve `null` y el sync lo
+  registra en `sync_failures` — sin perder nada silenciosamente. Como el parser es
+  puro (sin red), un `null` es definitivo: no se reintenta.
 
-### 10.1 Prompts por `notification_type`
+### 10.1 Extracción por `notification_type`
 
-- **`credit_card_purchase` / `debit_card_purchase`**: extraer monto, moneda, comercio (campo "Empresa"), número de tarjeta (últimos 4 dígitos), fecha y hora, número de operación.
-- **`yape`**: extraer monto, moneda, nombre del beneficiario, número de operación, fecha y hora. `payment_method_identifier` = **solo** el celular etiquetado como "Tu número de celular" (el del usuario, enmascarado); **nunca** el del beneficiario, para no crear medios de pago fantasma. Vacío si no aparece esa etiqueta.
-- **`service_payment`**: extraer monto, moneda, empresa, número de operación, número de documento (Doc. pago), fecha y hora. La "Cuenta de origen" puede ser **tarjeta de crédito, débito o cuenta** → clasificar en `payment_source_type` y poner sus últimos 4 dígitos en `payment_method_identifier`.
-- **`transfer`**: extraer monto, moneda, nombre del beneficiario, cuenta de origen (últimos 4 dígitos si aparece), número de operación, fecha y hora. (Sin medio de pago asociado.)
+- **`credit_card_purchase` / `debit_card_purchase`**: monto ("Monto Total del consumo", moneda por símbolo S/ o US$), comercio (campo "Empresa"), tarjeta (últimos 4 de "Número de Tarjeta de…"), número de operación.
+- **`yape`**: monto ("Monto de yapeo"), nombre del beneficiario ("Nombre del Beneficiario"), número de operación. `payment_method_identifier` = **solo** el celular de "Tu número de celular" (últimos 3 dígitos); **nunca** el del beneficiario, para no crear medios fantasma. Vacío si no aparece esa etiqueta.
+- **`service_payment`**: monto ("Monto total"), empresa ("Empresa"), número de operación, documento ("Doc. pago"). La "Cuenta de origen" define `payment_source_type` (crédito/débito/cuenta) y sus últimos 4 dígitos.
+- **`transfer`**: monto ("Monto transferido"), beneficiario ("Enviado a"), últimos 4 de la cuenta de origen ("Desde …"), número de operación. `payment_source_type` = `account`.
+
+### 10.2 Tests (`lib/parser/parser-service.test.ts`)
+
+Tests con el runner nativo `node:test` (cero dependencias). Usan **fixtures** —
+réplicas de las plantillas reales con valores ficticios— para verificar la extracción
+de cada tipo y proteger contra regresiones al refactorizar. Se corren con `pnpm test`
+y automáticamente en CI (`.github/workflows/ci.yml`) en cada PR y push a `main`.
 
 ---
 
@@ -332,7 +346,6 @@ ALCANCE (v0):
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | cliente + servidor | Publishable key (`sb_publishable_...`) — reemplaza a la antigua anon key; segura para el cliente |
 | `GOOGLE_CLIENT_ID` | servidor | Refrescar el access token de Gmail |
 | `GOOGLE_CLIENT_SECRET` | servidor | Refrescar el access token de Gmail |
-| `ANTHROPIC_API_KEY` | servidor | Claude API (parser) |
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | servidor | Clave AES-256-GCM (32 bytes base64) para cifrar el refresh token |
 
 ---
@@ -386,7 +399,7 @@ bernie-wallet/
 │   ├── supabase/{client,server}.ts
 │   ├── crypto.ts                 ← AES-256-GCM (node:crypto)
 │   ├── gmail/gmail-service.ts    ← fetch nativo
-│   └── parser/parser-service.ts  ← Claude API
+│   └── parser/parser-service.ts  ← parser programático (regex, sin IA)
 ├── supabase/migrations/0001_initial_schema.sql
 └── types/index.ts
 ```

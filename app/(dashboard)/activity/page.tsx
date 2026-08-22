@@ -1,5 +1,5 @@
 import { ReceiptText, SearchX } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { AddExpenseDialog } from "@/components/dashboard/add-expense-dialog";
 import { SyncButton } from "@/components/dashboard/sync-button";
 import { ActivityFilters } from "@/components/dashboard/activity-filters";
@@ -50,11 +50,9 @@ export default async function ActivityPage({
   const hasFilters = Boolean(q || from || to || method || catIds.length);
   const order = SORT_ORDER[sp.sort ?? "recent"] ?? SORT_ORDER.recent;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
+  const supabase = await createClient();
 
   // Datos de referencia (selects + join) + estado de sync. Pequeños y en paralelo.
   const [{ data: subs }, { data: methods }, { data: cats }, { count: bankCount }, { data: lastSync }] =

@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { getGmailAccessToken, searchMessages, getMessage } from "@/lib/gmail/gmail-service";
 import {
-  classifyDiscovery,
-  extractExpense,
-  type NotificationType,
-} from "@/lib/parser/parser-service";
+  getGmailAccessToken,
+  searchMessages,
+  getMessage,
+  GmailAuthError,
+} from "@/lib/gmail/gmail-service";
+import { extractExpense, type NotificationType } from "@/lib/parser/parser-service";
 
-// Usa node:crypto (token), Anthropic SDK y Buffer → forzamos runtime Node.
+// Usa node:crypto (cifrado del token) y Buffer → forzamos runtime Node.
 export const runtime = "nodejs";
 
 // Ventana de la PRIMERA sincronización (cuando no hay cursor previo). Configurable
@@ -21,12 +22,6 @@ const INITIAL_WINDOW_MS = INITIAL_DAYS * 24 * 60 * 60 * 1000;
 // más, el siguiente sync continúa desde el cursor (del más viejo al más nuevo,
 // sin dejar huecos). Ajustable con SYNC_MAX_RESULTS.
 const MAX_MESSAGES = Number(process.env.SYNC_MAX_RESULTS) || 100;
-
-// Modo descubrimiento (pruebas): audita TODOS los correos del banco (sin filtro
-// de asunto) y registra en sync_discoveries los que parecen gasto y los filtros
-// perderían. Se activa con SYNC_DISCOVERY=true. No afecta la capa real.
-const DISCOVERY = process.env.SYNC_DISCOVERY === "true";
-const DISCOVERY_MAX = 25; // correos a auditar por corrida (acota el costo de Claude)
 
 // Reintentos automáticos por correo dentro del MISMO sync (con backoff). Si tras
 // estos sigue fallando, lo descartamos y seguimos: un solo clic resuelve todo.
@@ -247,19 +242,10 @@ export async function POST() {
         continue;
       }
 
-      let parsed;
-      try {
-        parsed = await withRetry(() => extractExpense(message.text, match.notification_type));
-      } catch {
-        giveUpBuffer.push(id);
-        if (++consecutiveFails >= CIRCUIT_LIMIT) {
-          detenido = true;
-          break;
-        }
-        continue;
-      }
-      // El parser respondió (sano) pero no pudo extraer: definitivo. Dejamos traza
-      // en sync_failures para no reprocesarlo y poder revisarlo después.
+      // El parser es puro y determinístico (sin red): no se reintenta. Si no pudo
+      // extraer, es un formato no soportado (definitivo). Dejamos traza en
+      // sync_failures para no reprocesarlo y poder revisarlo después.
+      const parsed = extractExpense(message.text, match.notification_type);
       if (!parsed) {
         await commitGiveUps();
         consecutiveFails = 0;
@@ -338,66 +324,6 @@ export async function POST() {
       emails_new: nuevos,
     });
 
-    // ── Modo descubrimiento (pruebas): auditar el universo amplio del banco ──
-    // Escanea TODOS los correos de los remitentes del banco (sin filtro de asunto)
-    // y registra los que los filtros estrictos no capturan, para no perder gastos.
-    let descubiertos = 0;
-    if (DISCOVERY) {
-      const wideQuery = `from:(${uniqueSenders.join(" OR ")}) after:${afterSeconds}`;
-      const wideIds = await searchMessages(accessToken, wideQuery);
-      const imported = await collectExistingIds(supabase, "expenses", user.id, wideIds);
-      const analyzed = await collectExistingIds(supabase, "sync_discoveries", user.id, wideIds);
-      const toAudit = wideIds
-        .filter((id) => !imported.has(id) && !analyzed.has(id))
-        .slice(0, DISCOVERY_MAX);
-
-      for (const id of toAudit) {
-        let message;
-        try {
-          message = await getMessage(accessToken, id);
-        } catch {
-          continue; // transitorio: se reintenta en otra corrida
-        }
-
-        // ¿Ya lo cubre un filtro estricto? entonces no es un gasto "perdido".
-        const covered = senders.some(
-          (s) =>
-            message.from.includes(s.sender) &&
-            message.subject.toLowerCase().includes(s.subject_pattern.toLowerCase()),
-        );
-
-        let verdict = "covered";
-        let suggestedType: string | null = null;
-        let suggestedSubject: string | null = null;
-        let reason: string | null = "Coincide con un filtro existente.";
-
-        if (!covered) {
-          const v = await classifyDiscovery(message.text, message.subject, message.from);
-          if (!v) continue; // fallo del parser: no registrar, reintentar luego
-          verdict = v.is_expense ? "expense_candidate" : "not_expense";
-          suggestedType = v.suggested_type || null;
-          suggestedSubject = v.suggested_subject || null;
-          reason = v.reason || null;
-          if (v.is_expense) descubiertos += 1;
-        }
-
-        await supabase.from("sync_discoveries").upsert(
-          {
-            user_id: user.id,
-            message_id: id,
-            sender: message.from,
-            subject: message.subject,
-            verdict,
-            suggested_type: suggestedType,
-            suggested_subject: suggestedSubject,
-            reason,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id,message_id" },
-        );
-      }
-    }
-
     // restantes = recuperables aún sin importar (fuera del tope o por reintentar).
     // Los descartados no cuentan: ya nos rendimos con ellos.
     const restantes = totalNew - resolved - descartados;
@@ -407,9 +333,13 @@ export async function POST() {
       restantes,
       descartados,
       detenido,
-      descubiertos,
     });
   } catch (error) {
+    // Problema de acceso a Gmail (reconectable): el cliente muestra un modal que
+    // sugiere cerrar sesión y volver a entrar, o continuar sin reconectar.
+    if (error instanceof GmailAuthError) {
+      return NextResponse.json({ error: error.message, code: "gmail_auth" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Error al sincronizar.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -467,7 +397,7 @@ async function buildMerchantMemory(
 /** Subconjunto de `ids` que ya existe en `table` para el usuario, consultado en lotes. */
 async function collectExistingIds(
   supabase: SupabaseClient,
-  table: "expenses" | "sync_failures" | "sync_discoveries",
+  table: "expenses" | "sync_failures",
   userId: string,
   ids: string[],
 ): Promise<Set<string>> {
