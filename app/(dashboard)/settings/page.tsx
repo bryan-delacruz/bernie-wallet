@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { BankSettings } from "@/components/dashboard/bank-settings";
 import {
   PaymentMethodsSettings,
@@ -12,11 +12,9 @@ import { SignOutButton } from "@/components/dashboard/sign-out-button";
 const SECTION_TITLE = "text-sm font-semibold tracking-wide text-muted-foreground uppercase";
 
 export default async function SettingsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
+  const supabase = await createClient();
 
   const [{ data: systemBanks }, { data: userBanks }, { data: paymentMethods }] =
     await Promise.all([

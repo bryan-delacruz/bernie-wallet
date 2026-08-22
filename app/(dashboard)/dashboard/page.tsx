@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BalanceCard } from "@/components/dashboard/balance-card";
@@ -55,11 +55,9 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ from?: string; to?: string; cat?: string; method?: string }>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
+  const supabase = await createClient();
 
   const sp = await searchParams;
   const from = sp.from ?? "";

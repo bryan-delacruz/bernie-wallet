@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { CategoriesManager } from "@/components/dashboard/categories-manager";
 
 type Category = {
@@ -8,11 +8,9 @@ type Category = {
 };
 
 export default async function CategoriesPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
+  const supabase = await createClient();
 
   const { data: categories } = await supabase
     .from("categories")

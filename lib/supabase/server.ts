@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
@@ -30,3 +31,16 @@ export async function createClient() {
     },
   );
 }
+
+/**
+ * Usuario actual, **deduplicado por request** con React.cache: el layout y la
+ * página comparten una sola validación de token (una llamada de red a Supabase)
+ * en vez de una por cada `getUser()`. Reduce latencia en cada navegación.
+ */
+export const getCurrentUser = cache(async () => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+});
