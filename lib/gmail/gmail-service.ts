@@ -4,6 +4,18 @@ import { decrypt } from "@/lib/crypto";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
 
+/**
+ * Error de acceso a Gmail que se resuelve reconectando la cuenta: falta el token,
+ * el refresh falló, o Gmail respondió 401/403 (permiso no concedido / expirado).
+ * El endpoint lo usa para sugerirle al usuario cerrar sesión y volver a entrar.
+ */
+export class GmailAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GmailAuthError";
+  }
+}
+
 export type GmailMessage = {
   id: string;
   subject: string;
@@ -24,7 +36,7 @@ export async function getGmailAccessToken(
     .single();
 
   if (!row) {
-    throw new Error("No hay token de Google. Vuelve a iniciar sesión.");
+    throw new GmailAuthError("No hay token de Google. Vuelve a iniciar sesión.");
   }
 
   const res = await fetch(TOKEN_ENDPOINT, {
@@ -39,7 +51,7 @@ export async function getGmailAccessToken(
   });
 
   if (!res.ok) {
-    throw new Error("No se pudo refrescar el acceso a Gmail.");
+    throw new GmailAuthError("No se pudo refrescar el acceso a Gmail.");
   }
   const json = (await res.json()) as { access_token?: string };
   if (!json.access_token) throw new Error("Gmail no devolvió un access_token.");
@@ -66,7 +78,15 @@ export async function searchMessages(
     if (pageToken) url.searchParams.set("pageToken", pageToken);
 
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!res.ok) throw new Error("Error al listar correos de Gmail.");
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[gmail] messages.list ${res.status}: ${body.slice(0, 400)}`);
+      // 401/403 = token inválido o permiso de Gmail no concedido → reconectar.
+      if (res.status === 401 || res.status === 403) {
+        throw new GmailAuthError("Se perdió el acceso a Gmail. Vuelve a conectar tu cuenta.");
+      }
+      throw new Error(`Error al listar correos de Gmail (${res.status}).`);
+    }
     const json = (await res.json()) as {
       messages?: { id: string }[];
       nextPageToken?: string;

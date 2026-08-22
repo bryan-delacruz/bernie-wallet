@@ -7,12 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --test \"lib/**/*.test.ts\"",
     "db:new": "supabase migration new",
     "db:push": "supabase db push",
     "db:status": "supabase migration list"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.106.0",
     "@base-ui/react": "^1.6.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "2.108.2",
