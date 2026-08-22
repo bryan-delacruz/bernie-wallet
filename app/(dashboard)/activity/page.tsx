@@ -136,7 +136,7 @@ export default async function ActivityPage({
     ? `Última sincronización: ${formatShortDate(lastSync.created_at)}${
         lastSync.last_sync_at ? ` · cargado hasta ${formatShortDate(lastSync.last_sync_at)}` : ""
       }`
-    : "Revisa los últimos 30 días · hasta 100 correos";
+    : "Trae tus consumos recientes del banco · hasta 100 correos por sync";
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
