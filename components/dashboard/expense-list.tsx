@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +16,7 @@ import {
   type CategoryOption,
   type PaymentMethodOption,
 } from "@/components/dashboard/expense-form";
-import { updateExpense, deleteExpense } from "@/app/(dashboard)/activity/actions";
+import { createExpense, updateExpense, deleteExpense } from "@/app/(dashboard)/activity/actions";
 import { formatCurrency, formatShortDate, toLimaDateInput } from "@/lib/format";
 
 const TIPO_LABEL: Record<string, string> = {
@@ -49,6 +49,7 @@ export function ExpenseList({
   paymentMethods: PaymentMethodOption[];
 }) {
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
+  const [duplicating, setDuplicating] = useState<ExpenseRow | null>(null);
 
   return (
     <>
@@ -116,8 +117,59 @@ export function ExpenseList({
               onCancel={() => setEditing(null)}
               submitLabel="Guardar cambios"
               deleteSlot={
-                <DeleteExpenseButton id={editing.id} onDone={() => setEditing(null)} />
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      const exp = editing;
+                      setEditing(null);
+                      setDuplicating(exp);
+                    }}
+                  >
+                    <Copy className="size-4" />
+                    Duplicar
+                  </Button>
+                  <DeleteExpenseButton id={editing.id} onDone={() => setEditing(null)} />
+                </div>
               }
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!duplicating}
+        onOpenChange={(o) => {
+          if (!o) setDuplicating(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-heading text-xl font-medium">Duplicar gasto</DialogTitle>
+            <DialogDescription>
+              Se crea un gasto nuevo con estos datos (fecha de hoy). Ajusta lo que necesites.
+            </DialogDescription>
+          </DialogHeader>
+          {duplicating && (
+            <ExpenseForm
+              key={`dup-${duplicating.id}`}
+              categories={categories}
+              paymentMethods={paymentMethods}
+              initial={{
+                amount: Number(duplicating.amount),
+                currency: duplicating.currency,
+                merchant: duplicating.merchant,
+                date: toLimaDateInput(new Date().toISOString()),
+                categoryId: duplicating.subcategories?.category_id ?? "",
+                subcategoryId: duplicating.subcategory_id ?? "",
+                paymentMethodId: duplicating.payment_method_id ?? "",
+              }}
+              action={createExpense}
+              onDone={() => setDuplicating(null)}
+              onCancel={() => setDuplicating(null)}
+              submitLabel="Guardar gasto"
+              successMessage="Gasto agregado"
             />
           )}
         </DialogContent>

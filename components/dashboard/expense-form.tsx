@@ -43,6 +43,9 @@ type ExpenseFormProps = {
   onCancel: () => void;
   submitLabel: string;
   deleteSlot?: ReactNode;
+  /** Mensaje de éxito. Por defecto según `initial` (editar vs. agregar); útil para
+   *  el duplicado, que lleva `initial` pero es una creación. */
+  successMessage?: string;
 };
 
 export function ExpenseForm({
@@ -54,6 +57,7 @@ export function ExpenseForm({
   onCancel,
   submitLabel,
   deleteSlot,
+  successMessage,
 }: ExpenseFormProps) {
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
   const [submitting, setSubmitting] = useState(false);
@@ -72,7 +76,7 @@ export function ExpenseForm({
       setError(result.error);
       return;
     }
-    toast.success(initial ? "Gasto actualizado" : "Gasto agregado");
+    toast.success(successMessage ?? (initial ? "Gasto actualizado" : "Gasto agregado"));
     onDone();
   }
 
