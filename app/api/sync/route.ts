@@ -19,7 +19,7 @@ const INITIAL_WINDOW_MS = INITIAL_DAYS * 24 * 60 * 60 * 1000;
 
 // Máximo de correos a LEER de Gmail por sync (el parseo es local y gratis; lo que
 // se acota aquí es el volumen de lecturas a la API). Default 100.
-// La 1ª sincronización cubre los últimos 30 días (hasta este tope); si hubiera
+// La 1ª sincronización cubre la ventana inicial (hasta este tope); si hubiera
 // más, el siguiente sync continúa desde el cursor (del más viejo al más nuevo,
 // sin dejar huecos). Ajustable con SYNC_MAX_RESULTS.
 const MAX_MESSAGES = Number(process.env.SYNC_MAX_RESULTS) || 100;
@@ -111,7 +111,7 @@ export async function POST() {
       return NextResponse.json({ nuevos: 0, procesados: 0 });
     }
 
-    // Cursor: última sincronización o hace 30 días.
+    // Cursor: última sincronización o el inicio de la ventana inicial.
     const { data: lastSync } = await supabase
       .from("sync_logs")
       .select("last_sync_at")
@@ -134,7 +134,7 @@ export async function POST() {
     const query = `from:(${uniqueSenders.join(" OR ")}) subject:(${subjectClause}) after:${afterSeconds}`;
 
     const accessToken = await getGmailAccessToken(supabase, user.id);
-    // Listamos TODOS los IDs nuevos (gratis); el tope caro se aplica al parsear.
+    // Listamos TODOS los IDs nuevos (listar es gratis); el tope se aplica al leerlos.
     const allIds = await searchMessages(accessToken, query);
 
     // Diagnóstico: si la búsqueda estricta no trae nada, comprobar si SÍ hay
