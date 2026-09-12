@@ -15,7 +15,9 @@ export function StatTiles({ tiles, className }: { tiles: StatTile[]; className?:
     <div
       className={cn(
         "grid h-full grid-cols-2 gap-3",
-        tiles.length >= 3 && "sm:grid-cols-3",
+        // Tres columnas solo desde lg: entre 640 y 1023px la barra lateral angosta el
+        // contenido y un monto proyectado de 4 dígitos no cabe en un tercio.
+        tiles.length >= 3 && "lg:grid-cols-3",
         className,
       )}
     >
@@ -24,9 +26,9 @@ export function StatTiles({ tiles, className }: { tiles: StatTile[]; className?:
           key={t.label}
           className={cn(
             "flex min-w-0 flex-col justify-center overflow-hidden rounded-xl border border-border bg-card p-3 sm:p-4",
-            // Con 3 tiles el último cae solo en la 2da fila: a 320px necesita el ancho
-            // completo para que un monto proyectado de 4 dígitos no se trunque.
-            tiles.length === 3 && "max-sm:last:col-span-2",
+            // Con 3 tiles el último cae solo en la 2da fila mientras haya 2 columnas:
+            // ocupa el ancho completo para que el monto no se trunque.
+            tiles.length === 3 && "max-lg:last:col-span-2",
           )}
         >
           <p className="truncate text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -34,7 +36,7 @@ export function StatTiles({ tiles, className }: { tiles: StatTile[]; className?:
           </p>
           <p
             className={cn(
-              "mt-1 truncate text-lg font-semibold tracking-tight tabular-nums sm:text-2xl",
+              "mt-1 truncate text-lg font-semibold tracking-tight tabular-nums sm:text-xl lg:text-2xl",
               t.estimate && "text-muted-foreground",
             )}
           >
