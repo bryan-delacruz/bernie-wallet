@@ -464,6 +464,16 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 > 3. **El mes en curso se marca como tal** en el eje de la tendencia (sufijo "·"),
 >    para que su barra más baja no se lea como desplome frente a meses completos.
 >
+> **Paginación obligatoria en consultas de agregación.** La API de Supabase corta en
+> `max_rows` (1000) **sin error**: una consulta sin paginar devuelve menos filas y los
+> totales salen mal en silencio. `lib/supabase/paginate.ts` (`fetchAllRows`) recorre
+> las páginas con `range`; el llamador pasa una fábrica de consultas, una por página.
+>
+> **Gráficos con carga diferida.** Recharts pesa y los gráficos viven bajo el pliegue.
+> El import dinámico vive en `components/dashboard/lazy-charts.tsx`, que es un
+> **componente cliente**: si la página (Server Component) hiciera el `next/dynamic`,
+> Next no divide el chunk — ver `node_modules/next/dist/docs/01-app/02-guides/lazy-loading.md`.
+>
 > **Alturas derivadas del contenido.** El desglose por categoría calcula su alto por
 > número de filas (~34px por fila, con mínimo y máximo) en vez de un alto fijo: con
 > una sola categoría el alto fijo producía una barra desproporcionada.
