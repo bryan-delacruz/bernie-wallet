@@ -31,6 +31,9 @@ export function CategoryBars({ items, currency }: { items: CategoryDatum[]; curr
   });
   // Headroom en el eje para que la etiqueta del monto no se corte al borde.
   const max = Math.max(...sorted.map((i) => i.amount), 1);
+  // Alto derivado de las filas: con un alto fijo, una sola categoría producía una
+  // barra desproporcionada y seis quedaban apretadas.
+  const chartHeight = Math.min(260, Math.max(96, sorted.length * 34 + 28));
 
   return (
     <div className="space-y-3">
@@ -40,7 +43,7 @@ export function CategoryBars({ items, currency }: { items: CategoryDatum[]; curr
         </div>
       )}
 
-      <ChartContainer config={config} className="h-[220px] w-full">
+      <ChartContainer config={config} className="w-full" style={{ height: chartHeight }}>
         <BarChart accessibilityLayer data={sorted} layout="vertical" margin={{ left: 4, right: 64 }}>
           <XAxis type="number" domain={[0, max * 1.25]} hide />
           <YAxis

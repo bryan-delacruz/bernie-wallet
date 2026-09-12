@@ -1,19 +1,22 @@
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BalanceCard } from "@/components/dashboard/balance-card";
 import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { StatTiles } from "@/components/dashboard/stat-tiles";
-import { CategoryBars } from "@/components/dashboard/category-bars";
-import { PaymentSplit } from "@/components/dashboard/payment-split";
-import { MonthlyTrend } from "@/components/dashboard/monthly-trend";
+import { CategoryBars, PaymentSplit, MonthlyTrend } from "@/components/dashboard/lazy-charts";
 import { formatCurrency, formatShortDate, limaMonthRange } from "@/lib/format";
 
 const LIMA_TZ = "America/Lima";
 const SECTION_TITLE = "text-sm font-semibold tracking-wide text-muted-foreground uppercase";
 const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
+// Días transcurridos mínimos para extrapolar o comparar: antes de eso el promedio
+// diario es ruido. Y por encima de este delta, el porcentaje deja de informar.
+const MIN_DAYS_FOR_ESTIMATES = 3;
+const MAX_MEANINGFUL_DELTA_PCT = 300;
 
 const PAYMENT_META: Record<string, { label: string; color: string }> = {
   credit_card: { label: "TC", color: "var(--chart-1)" },
@@ -50,6 +53,8 @@ type ExpenseRow = {
   payment_method_id: string | null;
 };
 
+type TrendRow = { amount: number; currency: string; occurred_at: string };
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -79,16 +84,17 @@ export default async function DashboardPage({
   const { startIso: monthStartIso, endIso: monthEndIso, label: monthLabel } = limaMonthRange(now);
 
   // Ventana del trend: últimos 6 meses (00:00 Lima del 1er día).
-  const months = Array.from({ length: 6 }, (_, idx) => {
-    const back = 5 - idx;
-    const d = new Date(Date.UTC(curYear, curMonth - 1 - back, 1));
-    return {
-      key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
-      label: new Intl.DateTimeFormat("es-PE", { timeZone: "UTC", month: "short" }).format(d),
-      total: 0,
-      current: back === 0,
-    };
-  });
+  const months: { key: string; label: string; total: number; projected?: number; current: boolean }[] =
+    Array.from({ length: 6 }, (_, idx) => {
+      const back = 5 - idx;
+      const d = new Date(Date.UTC(curYear, curMonth - 1 - back, 1));
+      return {
+        key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+        label: new Intl.DateTimeFormat("es-PE", { timeZone: "UTC", month: "short" }).format(d),
+        total: 0,
+        current: back === 0,
+      };
+    });
   const trailingStartIso = new Date(Date.UTC(curYear, curMonth - 6, 1, 5)).toISOString();
 
   // Periodo del snapshot: rango de fechas si hay filtro, si no el mes actual.
@@ -115,32 +121,40 @@ export default async function DashboardPage({
     ? (methods ?? []).filter((m) => m.type === method).map((m) => m.id)
     : null;
 
-  // Query del periodo (total, KPIs, desgloses, últimos) + query del trend (6 meses).
-  let periodQuery = supabase
-    .from("expenses")
-    .select("id, merchant, amount, currency, occurred_at, source, subcategory_id, payment_method_id")
-    .eq("user_id", user.id);
-  if (periodStartIso) periodQuery = periodQuery.gte("occurred_at", periodStartIso);
-  if (periodEndIso) periodQuery = periodQuery.lt("occurred_at", periodEndIso);
-  if (methodIdsForType)
-    periodQuery = periodQuery.in("payment_method_id", methodIdsForType.length ? methodIdsForType : [NO_MATCH_UUID]);
-  if (subIds) periodQuery = periodQuery.in("subcategory_id", subIds.length ? subIds : [NO_MATCH_UUID]);
+  // Query del periodo (total, KPIs, desgloses) + query del trend (6 meses). Ambas se
+  // construyen por página: la API corta en `max_rows` (1000) sin avisar, así que
+  // paginamos en vez de recibir totales incompletos en silencio.
+  const periodPage = (from: number, to: number) => {
+    let q = supabase
+      .from("expenses")
+      .select("id, merchant, amount, currency, occurred_at, source, subcategory_id, payment_method_id")
+      .eq("user_id", user.id);
+    if (periodStartIso) q = q.gte("occurred_at", periodStartIso);
+    if (periodEndIso) q = q.lt("occurred_at", periodEndIso);
+    if (methodIdsForType)
+      q = q.in("payment_method_id", methodIdsForType.length ? methodIdsForType : [NO_MATCH_UUID]);
+    if (subIds) q = q.in("subcategory_id", subIds.length ? subIds : [NO_MATCH_UUID]);
+    return q.order("occurred_at", { ascending: false }).range(from, to);
+  };
 
-  let trendQuery = supabase
-    .from("expenses")
-    .select("amount, currency, occurred_at")
-    .eq("user_id", user.id)
-    .gte("occurred_at", trailingStartIso);
-  if (methodIdsForType)
-    trendQuery = trendQuery.in("payment_method_id", methodIdsForType.length ? methodIdsForType : [NO_MATCH_UUID]);
-  if (subIds) trendQuery = trendQuery.in("subcategory_id", subIds.length ? subIds : [NO_MATCH_UUID]);
+  const trendPage = (from: number, to: number) => {
+    let q = supabase
+      .from("expenses")
+      .select("amount, currency, occurred_at")
+      .eq("user_id", user.id)
+      .gte("occurred_at", trailingStartIso);
+    if (methodIdsForType)
+      q = q.in("payment_method_id", methodIdsForType.length ? methodIdsForType : [NO_MATCH_UUID]);
+    if (subIds) q = q.in("subcategory_id", subIds.length ? subIds : [NO_MATCH_UUID]);
+    return q.order("occurred_at", { ascending: false }).range(from, to);
+  };
 
-  const [{ data: periodRows }, { data: trendRows }] = await Promise.all([
-    periodQuery.order("occurred_at", { ascending: false }).limit(1000),
-    trendQuery,
+  const [{ rows: periodRows }, { rows: trendRows }] = await Promise.all([
+    fetchAllRows<ExpenseRow>(periodPage),
+    fetchAllRows<TrendRow>(trendPage),
   ]);
 
-  const rows = (periodRows ?? []) as ExpenseRow[];
+  const rows = periodRows;
 
   // Totales por moneda (no mezclar). Principal = el primero.
   const byCurrency = new Map<string, number>();
@@ -190,10 +204,18 @@ export default async function DashboardPage({
 
   // Tendencia (6 meses, moneda principal, respeta categoría/medio; ignora el rango).
   const monthIndex = new Map(months.map((m, i) => [m.key, i]));
-  for (const r of trendRows ?? []) {
+  // Mes anterior recortado al mismo día del mes que hoy: comparar el mes en curso
+  // contra el mes pasado COMPLETO haría que el delta siempre marque caída.
+  const prevMonthKey = months[4].key;
+  let prevSameDaysTotal = 0;
+  for (const r of trendRows) {
     if ((r.currency ?? "PEN") !== cur) continue;
-    const i = monthIndex.get(limaMonthFmt.format(new Date(r.occurred_at)).slice(0, 7));
+    const key = limaMonthFmt.format(new Date(r.occurred_at)).slice(0, 7);
+    const i = monthIndex.get(key);
     if (i !== undefined) months[i].total += Number(r.amount);
+    if (key === prevMonthKey && Number(limaDayFmt.format(new Date(r.occurred_at)).slice(8)) <= curDay) {
+      prevSameDaysTotal += Number(r.amount);
+    }
   }
 
   // KPIs + comparación (solo en modo mes actual).
@@ -204,20 +226,50 @@ export default async function DashboardPage({
   const dailyAvg = periodTotal / periodDays;
 
   let deltaPct: number | null = null;
-  let statTiles: { label: string; value: string; hint?: string }[];
+  let deltaHint: string | undefined;
+  let projection: number | null = null;
+  let statTiles: { label: string; value: string; hint?: string; estimate?: boolean }[];
   if (hasDateFilter) {
     statTiles = [
       { label: "Movimientos", value: String(movimientos) },
       { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
     ];
   } else {
-    const prevTotal = months[4].total;
-    deltaPct = prevTotal > 0 ? ((periodTotal - prevTotal) / prevTotal) * 100 : null;
+    // Con pocos días transcurridos, el promedio diario es ruido: un solo cargo
+    // grande el día 1 proyectaría un mes irreal y dispararía el delta.
+    const comparable = curDay >= MIN_DAYS_FOR_ESTIMATES;
+    if (comparable && prevSameDaysTotal > 0) {
+      const pct = ((periodTotal - prevSameDaysTotal) / prevSameDaysTotal) * 100;
+      // Una base diminuta produce porcentajes absurdos (S/ 10 → S/ 300 = +2900%):
+      // ahí el porcentaje se reemplaza por el monto con el que se compara.
+      if (Math.abs(pct) <= MAX_MEANINGFUL_DELTA_PCT) {
+        deltaPct = pct;
+        deltaHint = "vs. mismos días del mes pasado";
+      } else {
+        deltaHint = `Mismos días del mes pasado: ${formatCurrency(prevSameDaysTotal, cur)}`;
+      }
+    }
+    projection = comparable ? dailyAvg * daysInMonth : null;
     statTiles = [
       { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
       { label: "Movimientos", value: String(movimientos) },
-      { label: "Proyección", value: formatCurrency(dailyAvg * daysInMonth, cur), hint: "fin de mes" },
+      ...(projection !== null
+        ? [
+            {
+              label: "Proyección",
+              value: formatCurrency(projection, cur),
+              hint: "estimado, a fin de mes",
+              estimate: true,
+            },
+          ]
+        : []),
     ];
+  }
+
+  // El excedente proyectado se apila sobre el mes en curso en la tendencia, para
+  // que la barra corta del mes incompleto no se lea como desplome.
+  if (projection !== null) {
+    months[5].projected = Math.max(0, projection - months[5].total);
   }
 
   const periodLabel = !hasDateFilter
@@ -243,6 +295,7 @@ export default async function DashboardPage({
           monthLabel={periodLabel}
           totals={totals}
           deltaPct={deltaPct}
+          deltaHint={deltaHint}
           className={hasData ? "lg:col-span-1" : "lg:col-span-3"}
         />
         {hasData && <StatTiles tiles={statTiles} className="lg:col-span-2" />}

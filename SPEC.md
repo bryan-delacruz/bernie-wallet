@@ -450,6 +450,34 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 > Sin service worker (no se requiere para instalar). En Configuración, sección
 > **"Instalar app"** (`InstallApp`): botón nativo vía `beforeinstallprompt` en
 > Android/Chrome, instrucciones en iOS, oculto si ya está en modo standalone.
+> **Métricas honestas en el dashboard (hito 12.1).** Tres reglas que nacen de que
+> el mes en curso está incompleto y no debe compararse ni pintarse como si estuviera
+> cerrado:
+> 1. **Comparación a ventana igual.** El delta vs. el mes anterior compara el mes en
+>    curso contra los **mismos días** del mes pasado (día 1 → día de hoy), no contra
+>    el mes completo. Comparar 12 días contra 31 hace que el badge siempre marque
+>    caída al inicio del mes. La etiqueta lo dice: "vs. mismos días".
+> 2. **La proyección se ve como estimación, no como hecho.** Se muestra como
+>    segmento apilado translúcido sobre el mes en curso en la tendencia (con leyenda
+>    "Gastado / Proyectado") y el KPI queda rotulado como estimado. Cálculo:
+>    promedio diario × días del mes, menos lo ya gastado.
+> 3. **El mes en curso se marca como tal** en el eje de la tendencia (sufijo "·"),
+>    para que su barra más baja no se lea como desplome frente a meses completos.
+>
+> **Paginación obligatoria en consultas de agregación.** La API de Supabase corta en
+> `max_rows` (1000) **sin error**: una consulta sin paginar devuelve menos filas y los
+> totales salen mal en silencio. `lib/supabase/paginate.ts` (`fetchAllRows`) recorre
+> las páginas con `range`; el llamador pasa una fábrica de consultas, una por página.
+>
+> **Gráficos con carga diferida.** Recharts pesa y los gráficos viven bajo el pliegue.
+> El import dinámico vive en `components/dashboard/lazy-charts.tsx`, que es un
+> **componente cliente**: si la página (Server Component) hiciera el `next/dynamic`,
+> Next no divide el chunk — ver `node_modules/next/dist/docs/01-app/02-guides/lazy-loading.md`.
+>
+> **Alturas derivadas del contenido.** El desglose por categoría calcula su alto por
+> número de filas (~34px por fila, con mínimo y máximo) en vez de un alto fijo: con
+> una sola categoría el alto fijo producía una barra desproporcionada.
+
 9. **Categories**.
 10. **Settings**.
 11. **Gmail + Parser + Sync** (solo si eligió BCP).
