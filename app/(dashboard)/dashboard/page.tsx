@@ -14,6 +14,10 @@ import { formatCurrency, formatShortDate, limaMonthRange } from "@/lib/format";
 const LIMA_TZ = "America/Lima";
 const SECTION_TITLE = "text-sm font-semibold tracking-wide text-muted-foreground uppercase";
 const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
+// Días transcurridos mínimos para extrapolar o comparar: antes de eso el promedio
+// diario es ruido. Y por encima de este delta, el porcentaje deja de informar.
+const MIN_DAYS_FOR_ESTIMATES = 3;
+const MAX_MEANINGFUL_DELTA_PCT = 300;
 
 const PAYMENT_META: Record<string, { label: string; color: string }> = {
   credit_card: { label: "TC", color: "var(--chart-1)" },
@@ -213,6 +217,7 @@ export default async function DashboardPage({
   const dailyAvg = periodTotal / periodDays;
 
   let deltaPct: number | null = null;
+  let deltaHint: string | undefined;
   let projection: number | null = null;
   let statTiles: { label: string; value: string; hint?: string; estimate?: boolean }[];
   if (hasDateFilter) {
@@ -221,17 +226,34 @@ export default async function DashboardPage({
       { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
     ];
   } else {
-    deltaPct = prevSameDaysTotal > 0 ? ((periodTotal - prevSameDaysTotal) / prevSameDaysTotal) * 100 : null;
-    projection = dailyAvg * daysInMonth;
+    // Con pocos días transcurridos, el promedio diario es ruido: un solo cargo
+    // grande el día 1 proyectaría un mes irreal y dispararía el delta.
+    const comparable = curDay >= MIN_DAYS_FOR_ESTIMATES;
+    if (comparable && prevSameDaysTotal > 0) {
+      const pct = ((periodTotal - prevSameDaysTotal) / prevSameDaysTotal) * 100;
+      // Una base diminuta produce porcentajes absurdos (S/ 10 → S/ 300 = +2900%):
+      // ahí el porcentaje se reemplaza por el monto con el que se compara.
+      if (Math.abs(pct) <= MAX_MEANINGFUL_DELTA_PCT) {
+        deltaPct = pct;
+        deltaHint = "vs. mismos días del mes pasado";
+      } else {
+        deltaHint = `Mismos días del mes pasado: ${formatCurrency(prevSameDaysTotal, cur)}`;
+      }
+    }
+    projection = comparable ? dailyAvg * daysInMonth : null;
     statTiles = [
       { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
       { label: "Movimientos", value: String(movimientos) },
-      {
-        label: "Proyección",
-        value: formatCurrency(projection, cur),
-        hint: "estimado, a fin de mes",
-        estimate: true,
-      },
+      ...(projection !== null
+        ? [
+            {
+              label: "Proyección",
+              value: formatCurrency(projection, cur),
+              hint: "estimado, a fin de mes",
+              estimate: true,
+            },
+          ]
+        : []),
     ];
   }
 
@@ -264,7 +286,7 @@ export default async function DashboardPage({
           monthLabel={periodLabel}
           totals={totals}
           deltaPct={deltaPct}
-          deltaHint="vs. mismos días del mes pasado"
+          deltaHint={deltaHint}
           className={hasData ? "lg:col-span-1" : "lg:col-span-3"}
         />
         {hasData && <StatTiles tiles={statTiles} className="lg:col-span-2" />}

@@ -84,7 +84,7 @@ export function MonthlyTrend({ months, currency }: { months: MonthDatum[]; curre
               formatter={(value) => shortAmount(Number(value ?? 0), currency)}
             />
           </Bar>
-          {hasProjection && (
+          {hasProjection ? (
             <Bar
               dataKey="projected"
               stackId="month"
@@ -94,11 +94,11 @@ export function MonthlyTrend({ months, currency }: { months: MonthDatum[]; curre
               stroke="var(--card)"
               strokeWidth={2}
             />
-          )}
+          ) : null}
         </BarChart>
       </ChartContainer>
 
-      {hasProjection && (
+      {hasProjection ? (
         <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
           <li className="flex items-center gap-1.5">
             <span className="size-2.5 rounded-full bg-[var(--chart-1)]" />
@@ -110,7 +110,7 @@ export function MonthlyTrend({ months, currency }: { months: MonthDatum[]; curre
           </li>
           <li>· mes en curso</li>
         </ul>
-      )}
+      ) : null}
     </div>
   );
 }

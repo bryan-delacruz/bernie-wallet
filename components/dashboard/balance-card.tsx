@@ -66,14 +66,16 @@ export function BalanceCard({
         {formatCurrency(primary.total, primary.currency)}
       </p>
 
-      {typeof deltaPct === "number" && (
+      {typeof deltaPct === "number" || deltaHint ? (
         <div className="relative mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="inline-flex items-center gap-1 rounded-full bg-white/12 px-2 py-0.5 text-[11px] font-medium tabular-nums">
-            {deltaPct >= 0 ? "↑" : "↓"} {Math.abs(Math.round(deltaPct))}%
-          </span>
-          {deltaHint && <span className="text-[11px] text-white/60">{deltaHint}</span>}
+          {typeof deltaPct === "number" ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/12 px-2 py-0.5 text-[11px] font-medium tabular-nums">
+              {deltaPct >= 0 ? "↑" : "↓"} {Math.abs(Math.round(deltaPct))}%
+            </span>
+          ) : null}
+          {deltaHint ? <span className="text-[11px] text-white/60">{deltaHint}</span> : null}
         </div>
-      )}
+      ) : null}
 
       {secondary.length > 0 && (
         <div className="relative mt-1.5 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
