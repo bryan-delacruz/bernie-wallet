@@ -22,8 +22,9 @@ export type ParsedExpense = {
   document_number: string;
 };
 
-// Símbolo de moneda + monto. Perú usa coma de miles y punto decimal (1,234.56).
-const MONEY = String.raw`(S\/|US\$|\$)\s*([\d.,]+)`;
+// Símbolo de moneda + monto. El grupo del monto empieza y termina en dígito, para
+// no arrastrar puntuación que siga al número (p. ej. "S/ 23.50." → "23.50").
+const MONEY = String.raw`(S\/|US\$|\$)\s*(\d+(?:[.,]\d+)*)`;
 
 /**
  * Normaliza el cuerpo del correo: quita el zero-width space y los \r, une los
@@ -40,9 +41,27 @@ function normalize(text: string): string {
     .trim();
 }
 
-/** Convierte "1,234.56" (formato peruano) a número; NaN si no aplica. */
+/**
+ * Convierte el monto a número. Perú usa coma de miles y punto decimal
+ * ("1,234.56"), pero no asumimos el formato: si aparecen ambos separadores, el
+ * ÚLTIMO es el decimal. Con solo comas, son decimales si las siguen exactamente
+ * dos dígitos ("1,50"); si no, son de miles ("1,234"). Evita inflar el monto 100x.
+ */
 function parseAmount(raw: string): number {
-  return Number(raw.replace(/,/g, ""));
+  const lastComma = raw.lastIndexOf(",");
+  const lastDot = raw.lastIndexOf(".");
+
+  if (lastComma > -1 && lastDot > -1) {
+    return lastComma > lastDot
+      ? Number(raw.replace(/\./g, "").replace(",", "."))
+      : Number(raw.replace(/,/g, ""));
+  }
+  if (lastComma > -1) {
+    return /,\d{2}$/.test(raw)
+      ? Number(raw.replace(",", "."))
+      : Number(raw.replace(/,/g, ""));
+  }
+  return Number(raw);
 }
 
 /** Últimos 4 dígitos de un segmento con máscara (ignora '*', espacios y BIN). */
@@ -72,6 +91,9 @@ function parseCardPurchase(
 
   const merchant =
     text.match(/Empresa\s+([\s\S]+?)\s+Número de operación/i)?.[1]?.trim() ?? "";
+  // Sin comercio el gasto queda degradado: es deriva de plantilla, no un gasto
+  // válido. Devolvemos null para que el sync lo mande a sync_failures.
+  if (!merchant) return null;
   const cardSeg =
     text.match(
       new RegExp(`Número de Tarjeta de ${label}\\s+([\\*\\s\\d]+?)\\s+Empresa`, "i"),
@@ -98,6 +120,7 @@ function parseServicePayment(text: string): ParsedExpense | null {
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
   const merchant = text.match(/Empresa:\s*\*([^*]+?)\*/i)?.[1]?.trim() ?? "";
+  if (!merchant) return null;
   const operation = text.match(/Número de operación:\s*\*?\s*(\d+)/i)?.[1] ?? "";
   const document = text.match(/Doc\.\s*pago:\s*\*([^*]+?)\*/i)?.[1]?.trim() ?? "";
 
@@ -132,6 +155,8 @@ function parseYape(text: string): ParsedExpense | null {
       .match(/Nombre del Beneficiario\s+([\s\S]+?)\s+N[ºo°]\s*de operaci[óo]n/i)?.[1]
       ?.replace(/\*+$/, "")
       .trim() ?? "";
+  if (!merchant) return null;
+  // El celular sí puede faltar legítimamente (SPEC §10.1): queda vacío, no anula.
   const phone = text.match(/Tu número de celular\s+(\S+)/i)?.[1] ?? "";
   const operation = text.match(/N[ºo°]\s*de operaci[óo]n\s+(\d+)/i)?.[1] ?? "";
 
@@ -159,6 +184,7 @@ function parseTransfer(text: string): ParsedExpense | null {
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
   const merchant = text.match(/Enviado a\s*\*([^*]+?)\*/i)?.[1]?.trim() ?? "";
+  if (!merchant) return null;
   const operation = text.match(/Número de operación\s*\*?\s*(\d+)/i)?.[1] ?? "";
   // "Desde *<cuenta>* **** 1234" → los últimos 4 de la cuenta de origen.
   const originSeg = text.match(/Desde\s*\*[^*]+\*\s*([\*\s\d]+)/i)?.[1] ?? "";

@@ -103,7 +103,14 @@ export async function getMessage(accessToken: string, id: string): Promise<Gmail
   const res = await fetch(`${GMAIL_API}/messages/${id}?format=full`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error("Error al leer un correo de Gmail.");
+  if (!res.ok) {
+    // Igual que en searchMessages: 401/403 es pérdida de acceso, no un fallo
+    // transitorio. Debe llegar al endpoint para ofrecer reconectar la cuenta.
+    if (res.status === 401 || res.status === 403) {
+      throw new GmailAuthError("Se perdió el acceso a Gmail. Vuelve a conectar tu cuenta.");
+    }
+    throw new Error("Error al leer un correo de Gmail.");
+  }
   const json = (await res.json()) as GmailApiMessage;
 
   const headers = json.payload?.headers ?? [];

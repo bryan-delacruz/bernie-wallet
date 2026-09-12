@@ -106,3 +106,28 @@ test("correo no parseable → null", () => {
   assert.equal(extractExpense("Texto sin estructura de gasto", "credit_card_purchase"), null);
   assert.equal(extractExpense("", "yape"), null);
 });
+
+test("deriva de plantilla: monto sí, comercio no → null (no guarda gasto degradado)", () => {
+  // El banco renombra "Empresa" pero conserva el monto: debe ir a sync_failures,
+  // no guardarse un gasto sin comercio.
+  const drifted = CREDIT_CARD.replace("Empresa PYU*The Coffee", "Comercio PYU*The Coffee");
+  assert.equal(extractExpense(drifted, "credit_card_purchase"), null);
+});
+
+test("monto: coma decimal no infla el valor 100x", () => {
+  const comma = CREDIT_CARD.replace(/S\/ 23\.50/g, "S/ 1,50");
+  assert.equal(extractExpense(comma, "credit_card_purchase")?.amount, 1.5);
+});
+
+test("monto: coma de miles con punto decimal", () => {
+  const thousands = CREDIT_CARD.replace(/S\/ 23\.50/g, "S/ 1,234.56");
+  assert.equal(extractExpense(thousands, "credit_card_purchase")?.amount, 1234.56);
+});
+
+test("monto: puntuación final no rompe el parseo", () => {
+  const trailing = CREDIT_CARD.replace(
+    "Monto Total del consumo S/ 23.50",
+    "Monto Total del consumo S/ 23.50.",
+  );
+  assert.equal(extractExpense(trailing, "credit_card_purchase")?.amount, 23.5);
+});

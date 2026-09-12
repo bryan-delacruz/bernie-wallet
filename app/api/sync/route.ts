@@ -17,8 +17,9 @@ export const runtime = "nodejs";
 const INITIAL_DAYS = Number(process.env.SYNC_INITIAL_DAYS) || 30;
 const INITIAL_WINDOW_MS = INITIAL_DAYS * 24 * 60 * 60 * 1000;
 
-// Máximo de correos a PARSEAR con Claude por sync (lo caro). Default 100.
-// La 1ª sincronización cubre los últimos 30 días (hasta este tope); si hubiera
+// Máximo de correos a LEER de Gmail por sync (el parseo es local y gratis; lo que
+// se acota aquí es el volumen de lecturas a la API). Default 100.
+// La 1ª sincronización cubre la ventana inicial (hasta este tope); si hubiera
 // más, el siguiente sync continúa desde el cursor (del más viejo al más nuevo,
 // sin dejar huecos). Ajustable con SYNC_MAX_RESULTS.
 const MAX_MESSAGES = Number(process.env.SYNC_MAX_RESULTS) || 100;
@@ -110,7 +111,7 @@ export async function POST() {
       return NextResponse.json({ nuevos: 0, procesados: 0 });
     }
 
-    // Cursor: última sincronización o hace 30 días.
+    // Cursor: última sincronización o el inicio de la ventana inicial.
     const { data: lastSync } = await supabase
       .from("sync_logs")
       .select("last_sync_at")
@@ -133,7 +134,7 @@ export async function POST() {
     const query = `from:(${uniqueSenders.join(" OR ")}) subject:(${subjectClause}) after:${afterSeconds}`;
 
     const accessToken = await getGmailAccessToken(supabase, user.id);
-    // Listamos TODOS los IDs nuevos (gratis); el tope caro se aplica al parsear.
+    // Listamos TODOS los IDs nuevos (listar es gratis); el tope se aplica al leerlos.
     const allIds = await searchMessages(accessToken, query);
 
     // Diagnóstico: si la búsqueda estricta no trae nada, comprobar si SÍ hay
@@ -167,8 +168,8 @@ export async function POST() {
       .filter((id) => !known.has(id) && !deadLettered.has(id))
       .reverse();
     const totalNew = pendingAll.length;
-    // Solo parseamos MAX_MESSAGES por corrida (lo caro es Claude); el resto queda
-    // para el siguiente sync, que continúa desde donde quedó.
+    // Solo leemos MAX_MESSAGES por corrida (acota las lecturas a Gmail); el resto
+    // queda para el siguiente sync, que continúa desde donde quedó.
     const batch = pendingAll.slice(0, MAX_MESSAGES);
 
     let nuevos = 0;
@@ -218,7 +219,11 @@ export async function POST() {
       let message;
       try {
         message = await withRetry(() => getMessage(accessToken, id));
-      } catch {
+      } catch (error) {
+        // Perder el acceso a Gmail no es un fallo del correo: reintentarlo o
+        // descartarlo esconde el problema. Propagamos para responder gmail_auth
+        // y que el usuario pueda reconectar la cuenta.
+        if (error instanceof GmailAuthError) throw error;
         giveUpBuffer.push(id);
         if (++consecutiveFails >= CIRCUIT_LIMIT) {
           detenido = true; // caída del servicio: paramos sin confirmar descartes

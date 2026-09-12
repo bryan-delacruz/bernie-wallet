@@ -168,7 +168,7 @@ export function ExpenseList({
               action={createExpense}
               onDone={() => setDuplicating(null)}
               onCancel={() => setDuplicating(null)}
-              submitLabel="Guardar gasto"
+              submitLabel="Agregar gasto"
               successMessage="Gasto agregado"
             />
           )}
