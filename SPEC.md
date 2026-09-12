@@ -383,6 +383,8 @@ bernie-wallet/
 ├── app/
 │   ├── layout.tsx                ← root layout (Metadata API)
 │   ├── page.tsx                  ← home (pública)
+│   ├── privacy/page.tsx          ← política de privacidad (pública)
+│   ├── terms/page.tsx            ← condiciones del servicio (pública)
 │   ├── (auth)/
 │   │   └── login/page.tsx
 │   ├── (dashboard)/                 ← route group (no agrega segmento a la URL)
@@ -442,3 +444,53 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 9. **Categories**.
 10. **Settings**.
 11. **Gmail + Parser + Sync** (solo si eligió BCP).
+12. **Páginas legales** (`/privacy`, `/terms`) — requisito para publicar la app
+    OAuth de Google. Ver §14.
+
+---
+
+## 14. Páginas legales y publicación de la app OAuth
+
+### 14.1 Por qué existen
+
+`gmail.readonly` es un scope **restringido** de Google. Mientras el proyecto está
+en estado de publicación **Prueba**, Google **caduca los refresh tokens a los 7
+días**, obligando al usuario a reconectar Gmail cada semana. Pasar el estado a
+**En producción** elimina esa caducidad, y para publicar la consola exige:
+
+- logo de 120×120 en la pantalla de consentimiento,
+- dominio autorizado (`bernie-wallet.vercel.app`),
+- **URL pública de la página principal**,
+- **URL pública de política de privacidad**,
+- URL de condiciones del servicio (opcional).
+
+El detalle operativo del trámite vive en `docs/google-oauth/README.md`.
+
+### 14.2 Requisitos técnicos de las páginas
+
+- Rutas **públicas** y **estáticas** (Server Components, cero JS de cliente),
+  dentro del dominio autorizado. `proxy.ts` solo refresca la sesión de Supabase y
+  no bloquea rutas, así que no requieren cambios de acceso.
+- Alcanzables **sin login**: Google rechaza una política detrás de autenticación.
+- Enlazadas desde el footer público (`components/home/site-footer.tsx`).
+- Shell compartido: `components/legal/legal-shell.tsx` (header + footer de la
+  landing, tipografía de prosa, fecha de última actualización).
+
+### 14.3 Contenido obligatorio de la política
+
+Por tratarse de un scope restringido, la política **debe declarar explícitamente**
+el cumplimiento de la *Google API Services User Data Policy*, incluidos los
+requisitos de **Limited Use**. Además describe:
+
+- qué datos se leen: solo correos de los remitentes de `system_senders` (BCP),
+  con acceso de **solo lectura**; Bernie no envía, modifica ni borra correos;
+- qué se extrae y guarda en `expenses` (monto, moneda, comercio, fecha, números de
+  operación/documento) y en `payment_methods` (solo los últimos dígitos);
+- qué **no** se guarda: credenciales bancarias, contraseñas, ni el contenido
+  completo de los correos;
+- dónde vive: Supabase con RLS por `user_id`; el refresh token de Google en
+  `google_tokens`, cifrado con AES-256-GCM;
+- que no se comparten ni venden datos a terceros, ni se usan para publicidad ni
+  para entrenar modelos;
+- cómo revocar el acceso (`myaccount.google.com/permissions`) y cómo pedir el
+  borrado de la cuenta.

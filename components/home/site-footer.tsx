@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BernieLogoColor } from "@/components/brand/bernie-logo";
 
 /** Footer minimal, aterrizado en marfil más profundo. */
@@ -12,9 +13,19 @@ export function SiteFooter() {
           </div>
           <p className="text-xs text-[#6b675b]">Tus gastos se anotan solos.</p>
         </div>
-        <p className="text-center text-xs text-[#6b675b]/70 sm:text-right">
-          Hecho en Perú · © 2026 Bernie Wallet
-        </p>
+        <div className="flex flex-col items-center gap-2 sm:items-end">
+          <nav className="flex items-center gap-4 text-xs text-[#6b675b]">
+            <Link href="/privacy" className="transition-colors hover:text-[#0e7c58]">
+              Privacidad
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-[#0e7c58]">
+              Condiciones
+            </Link>
+          </nav>
+          <p className="text-center text-xs text-[#6b675b]/70 sm:text-right">
+            Hecho en Perú · © 2026 Bernie Wallet
+          </p>
+        </div>
       </div>
     </footer>
   );
