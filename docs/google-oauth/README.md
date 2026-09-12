@@ -3,6 +3,10 @@
 Registro de lo que Google Cloud pide para la app OAuth de Bernie Wallet, para no
 tener que redescubrirlo cada vez que cambia la consola.
 
+Los hallazgos técnicos completos (comportamiento de `prompt=consent`, evidencia de
+las pruebas, políticas de Google y limitaciones) están en
+[`findings.md`](findings.md). Este archivo se queda con el trámite.
+
 ## Por qué existe este documento
 
 El scope que usamos, `https://www.googleapis.com/auth/gmail.readonly`, es un scope
@@ -63,13 +67,16 @@ sips -z 120 120 /tmp/icon-512.png --out docs/google-oauth/assets/consent-logo-12
 
 - [x] Logo 120×120 generado.
 - [x] Páginas `/privacy` y `/terms` creadas (estáticas, públicas).
-- [ ] Páginas desplegadas a producción (deben responder 200 antes de que Google valide).
-- [ ] Logo subido a la pantalla de consentimiento.
-- [ ] Sección "Dominio de la app" completada con la tabla de arriba.
-- [ ] Estado de publicación cambiado a **En producción**.
-- [ ] Reautorizar en producción (logout + login) para emitir un refresh token sin
-      caducidad de 7 días. El token actual fue emitido en *Testing* y muere igual.
-- [ ] Verificar que al día 8 no pide reconectar.
+- [x] Páginas desplegadas a producción — responden 200 (PR #8).
+- [x] Logo subido a la pantalla de consentimiento.
+- [x] Sección "Dominio de la app" completada con la tabla de arriba.
+- [x] Correo de asistencia apuntado al Grupo de Google.
+- [x] Estado de publicación cambiado a **En producción** (12-09-2026).
+- [x] Reautorizado en producción: el consentimiento nuevo emitió un refresh token
+      sin la caducidad de 7 días.
+- [x] Login sin `prompt=consent` (PR #9) — probado en producción y en local.
+- [ ] **20-09-2026**: confirmar que al día 8 no pide reconectar Gmail. Es la única
+      comprobación que falta y solo la da el tiempo.
 
 Si la consola exige **enviar a verificación** (dominio autorizado, política de
 privacidad, video de demostración, justificación del scope → evaluación CASA), no
