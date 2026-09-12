@@ -79,16 +79,17 @@ export default async function DashboardPage({
   const { startIso: monthStartIso, endIso: monthEndIso, label: monthLabel } = limaMonthRange(now);
 
   // Ventana del trend: últimos 6 meses (00:00 Lima del 1er día).
-  const months = Array.from({ length: 6 }, (_, idx) => {
-    const back = 5 - idx;
-    const d = new Date(Date.UTC(curYear, curMonth - 1 - back, 1));
-    return {
-      key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
-      label: new Intl.DateTimeFormat("es-PE", { timeZone: "UTC", month: "short" }).format(d),
-      total: 0,
-      current: back === 0,
-    };
-  });
+  const months: { key: string; label: string; total: number; projected?: number; current: boolean }[] =
+    Array.from({ length: 6 }, (_, idx) => {
+      const back = 5 - idx;
+      const d = new Date(Date.UTC(curYear, curMonth - 1 - back, 1));
+      return {
+        key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+        label: new Intl.DateTimeFormat("es-PE", { timeZone: "UTC", month: "short" }).format(d),
+        total: 0,
+        current: back === 0,
+      };
+    });
   const trailingStartIso = new Date(Date.UTC(curYear, curMonth - 6, 1, 5)).toISOString();
 
   // Periodo del snapshot: rango de fechas si hay filtro, si no el mes actual.
@@ -190,10 +191,18 @@ export default async function DashboardPage({
 
   // Tendencia (6 meses, moneda principal, respeta categoría/medio; ignora el rango).
   const monthIndex = new Map(months.map((m, i) => [m.key, i]));
+  // Mes anterior recortado al mismo día del mes que hoy: comparar el mes en curso
+  // contra el mes pasado COMPLETO haría que el delta siempre marque caída.
+  const prevMonthKey = months[4].key;
+  let prevSameDaysTotal = 0;
   for (const r of trendRows ?? []) {
     if ((r.currency ?? "PEN") !== cur) continue;
-    const i = monthIndex.get(limaMonthFmt.format(new Date(r.occurred_at)).slice(0, 7));
+    const key = limaMonthFmt.format(new Date(r.occurred_at)).slice(0, 7);
+    const i = monthIndex.get(key);
     if (i !== undefined) months[i].total += Number(r.amount);
+    if (key === prevMonthKey && Number(limaDayFmt.format(new Date(r.occurred_at)).slice(8)) <= curDay) {
+      prevSameDaysTotal += Number(r.amount);
+    }
   }
 
   // KPIs + comparación (solo en modo mes actual).
@@ -204,20 +213,32 @@ export default async function DashboardPage({
   const dailyAvg = periodTotal / periodDays;
 
   let deltaPct: number | null = null;
-  let statTiles: { label: string; value: string; hint?: string }[];
+  let projection: number | null = null;
+  let statTiles: { label: string; value: string; hint?: string; estimate?: boolean }[];
   if (hasDateFilter) {
     statTiles = [
       { label: "Movimientos", value: String(movimientos) },
       { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
     ];
   } else {
-    const prevTotal = months[4].total;
-    deltaPct = prevTotal > 0 ? ((periodTotal - prevTotal) / prevTotal) * 100 : null;
+    deltaPct = prevSameDaysTotal > 0 ? ((periodTotal - prevSameDaysTotal) / prevSameDaysTotal) * 100 : null;
+    projection = dailyAvg * daysInMonth;
     statTiles = [
       { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
       { label: "Movimientos", value: String(movimientos) },
-      { label: "Proyección", value: formatCurrency(dailyAvg * daysInMonth, cur), hint: "fin de mes" },
+      {
+        label: "Proyección",
+        value: formatCurrency(projection, cur),
+        hint: "estimado, a fin de mes",
+        estimate: true,
+      },
     ];
+  }
+
+  // El excedente proyectado se apila sobre el mes en curso en la tendencia, para
+  // que la barra corta del mes incompleto no se lea como desplome.
+  if (projection !== null) {
+    months[5].projected = Math.max(0, projection - months[5].total);
   }
 
   const periodLabel = !hasDateFilter
@@ -243,6 +264,7 @@ export default async function DashboardPage({
           monthLabel={periodLabel}
           totals={totals}
           deltaPct={deltaPct}
+          deltaHint="vs. mismos días del mes pasado"
           className={hasData ? "lg:col-span-1" : "lg:col-span-3"}
         />
         {hasData && <StatTiles tiles={statTiles} className="lg:col-span-2" />}

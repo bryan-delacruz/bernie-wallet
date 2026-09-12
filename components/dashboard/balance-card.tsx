@@ -8,13 +8,21 @@ type BalanceCardProps = {
   monthLabel: string;
   /** Totales por moneda. El primero es el principal (PEN); el resto, secundarios. */
   totals: CurrencyTotal[];
-  /** Variación % del total principal vs. el mes pasado. null si no hay con qué comparar. */
+  /** Variación % del total principal vs. la ventana equivalente. null si no hay con qué comparar. */
   deltaPct?: number | null;
+  /** Contra qué se compara el delta; se muestra bajo la insignia. */
+  deltaHint?: string;
   className?: string;
 };
 
 /** Tarjeta de saldo "metálica" — pieza protagonista premium del dashboard. Bimoneda. */
-export function BalanceCard({ monthLabel, totals, deltaPct, className }: BalanceCardProps) {
+export function BalanceCard({
+  monthLabel,
+  totals,
+  deltaPct,
+  deltaHint,
+  className,
+}: BalanceCardProps) {
   const [primary = { currency: "PEN", total: 0 }, ...secondary] = totals;
 
   return (
@@ -59,9 +67,12 @@ export function BalanceCard({ monthLabel, totals, deltaPct, className }: Balance
       </p>
 
       {typeof deltaPct === "number" && (
-        <span className="relative mt-2 inline-flex items-center gap-1 rounded-full bg-white/12 px-2 py-0.5 text-[11px] font-medium">
-          {deltaPct >= 0 ? "↑" : "↓"} {Math.abs(Math.round(deltaPct))}% vs. mes pasado
-        </span>
+        <div className="relative mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/12 px-2 py-0.5 text-[11px] font-medium tabular-nums">
+            {deltaPct >= 0 ? "↑" : "↓"} {Math.abs(Math.round(deltaPct))}%
+          </span>
+          {deltaHint && <span className="text-[11px] text-white/60">{deltaHint}</span>}
+        </div>
       )}
 
       {secondary.length > 0 && (

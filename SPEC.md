@@ -450,6 +450,24 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 > Sin service worker (no se requiere para instalar). En Configuración, sección
 > **"Instalar app"** (`InstallApp`): botón nativo vía `beforeinstallprompt` en
 > Android/Chrome, instrucciones en iOS, oculto si ya está en modo standalone.
+> **Métricas honestas en el dashboard (hito 12.1).** Tres reglas que nacen de que
+> el mes en curso está incompleto y no debe compararse ni pintarse como si estuviera
+> cerrado:
+> 1. **Comparación a ventana igual.** El delta vs. el mes anterior compara el mes en
+>    curso contra los **mismos días** del mes pasado (día 1 → día de hoy), no contra
+>    el mes completo. Comparar 12 días contra 31 hace que el badge siempre marque
+>    caída al inicio del mes. La etiqueta lo dice: "vs. mismos días".
+> 2. **La proyección se ve como estimación, no como hecho.** Se muestra como
+>    segmento apilado translúcido sobre el mes en curso en la tendencia (con leyenda
+>    "Gastado / Proyectado") y el KPI queda rotulado como estimado. Cálculo:
+>    promedio diario × días del mes, menos lo ya gastado.
+> 3. **El mes en curso se marca como tal** en el eje de la tendencia (sufijo "·"),
+>    para que su barra más baja no se lea como desplome frente a meses completos.
+>
+> **Alturas derivadas del contenido.** El desglose por categoría calcula su alto por
+> número de filas (~34px por fila, con mínimo y máximo) en vez de un alto fijo: con
+> una sola categoría el alto fijo producía una barra desproporcionada.
+
 9. **Categories**.
 10. **Settings**.
 11. **Gmail + Parser + Sync** (solo si eligió BCP).
