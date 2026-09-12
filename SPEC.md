@@ -217,7 +217,16 @@ CREATE UNIQUE INDEX ON expenses (user_id, message_id) WHERE message_id IS NOT NU
 - **Login con Google vía Supabase Auth.**
 - El OAuth token de Google se **reutiliza para acceder a la Gmail API** del usuario (no se pide un segundo login).
 - Scopes solicitados: `email`, `profile`, `https://www.googleapis.com/auth/gmail.readonly`.
-- Query params del OAuth: `access_type=offline` + `prompt=consent` → para obtener `provider_refresh_token`.
+- Query params del OAuth: `access_type=offline` siempre. `prompt=consent` **solo
+  en reconexión** (`/login?reconnect=1`): forzarlo en cada login obliga a Google a
+  repintar la pantalla de consentimiento y, con un scope restringido sin verificar,
+  también el aviso de "app no verificada". Sin `prompt`, Google reconoce el permiso
+  ya otorgado y salta ambas pantallas.
+- Google solo entrega `provider_refresh_token` en la **primera** autorización o
+  cuando se fuerza `prompt=consent`. El callback lo contempla: solo sobrescribe
+  `google_tokens` si llega un token nuevo, así que un login silencioso preserva el
+  guardado. Si el token se pierde, el modal de reconexión de `SyncButton` manda a
+  `/login?reconnect=1`, que sí fuerza el consentimiento y emite uno nuevo.
 - En el callback se cifra el `refresh_token` (AES-256-GCM, `node:crypto`) y se guarda en `google_tokens`.
 - **Guard de estado inválido**: si un usuario **autenticado** no tiene fila en `users` (perfil ausente), los guards (layout del dashboard y onboarding) lo envían a `/api/auth/signout` → cierra sesión → `/login`. No se auto-crea el perfil fuera del callback de login.
 
