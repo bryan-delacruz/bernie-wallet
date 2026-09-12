@@ -37,7 +37,16 @@ function GoogleGlyph() {
   );
 }
 
-export function GoogleSignInButton({ className }: { className?: string }) {
+export function GoogleSignInButton({
+  className,
+  reconnect = false,
+}: {
+  className?: string;
+  /** Reconexión: fuerza el consentimiento para que Google emita un refresh_token
+   *  nuevo. En un login normal se omite, porque `prompt=consent` obliga a Google a
+   *  mostrar el consentimiento y el aviso de "app no verificada" cada vez. */
+  reconnect?: boolean;
+}) {
   // Cliente Supabase instanciado una sola vez (lazy init), no en cada clic:
   // evita crear múltiples GoTrueClient.
   const [supabase] = useState(createClient);
@@ -52,9 +61,12 @@ export function GoogleSignInButton({ className }: { className?: string }) {
         provider: "google",
         options: {
           scopes: GMAIL_SCOPES,
-          // access_type=offline + prompt=consent fuerzan que Google entregue el
-          // refresh_token (necesario para sincronizar Gmail en sesiones futuras).
-          queryParams: { access_type: "offline", prompt: "consent" },
+          // access_type=offline pide el refresh_token; Google solo lo entrega en la
+          // primera autorización o si se fuerza el consentimiento (reconexión).
+          queryParams: {
+            access_type: "offline",
+            ...(reconnect ? { prompt: "consent" } : {}),
+          },
           redirectTo: `${window.location.origin}/api/auth/callback`,
         },
       });
@@ -83,7 +95,7 @@ export function GoogleSignInButton({ className }: { className?: string }) {
         ) : (
           <GoogleGlyph />
         )}
-        {loading ? "Conectando…" : "Continuar con Google"}
+        {loading ? "Conectando…" : reconnect ? "Reconectar Gmail" : "Continuar con Google"}
       </Button>
 
       {error ? (

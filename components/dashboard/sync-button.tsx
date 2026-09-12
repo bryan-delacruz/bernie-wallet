@@ -80,7 +80,9 @@ export function SyncButton({ className }: { className?: string }) {
     setSigningOut(true);
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.replace("/login");
+    // ?reconnect=1 fuerza prompt=consent: es lo único que hace a Google emitir un
+    // refresh_token nuevo, porque el login normal ya no lo pide.
+    router.replace("/login?reconnect=1");
   }
 
   return (
@@ -103,9 +105,9 @@ export function SyncButton({ className }: { className?: string }) {
             <DialogTitle>Reconecta tu cuenta de Gmail</DialogTitle>
             <DialogDescription>
               Perdimos el acceso a tus correos, por eso no pudimos sincronizar. Cierra
-              sesión y vuelve a entrar para reconectar Gmail (recuerda dejar marcado el
-              permiso de lectura de correos). También puedes continuar sin reconectar y
-              seguir agregando gastos a mano.
+              sesión para volver a dar el permiso de lectura de correos (recuerda dejarlo
+              marcado). También puedes continuar sin reconectar y seguir agregando gastos
+              a mano.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

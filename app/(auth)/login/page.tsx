@@ -32,7 +32,7 @@ const DEFAULT_ERROR = "Ocurrió un problema al iniciar sesión. Inténtalo de nu
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; reconnect?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -43,8 +43,11 @@ export default async function LoginPage({
     redirect("/dashboard");
   }
 
-  const { error } = await searchParams;
+  const { error, reconnect } = await searchParams;
   const errorMessage = error ? (ERROR_MESSAGES[error] ?? DEFAULT_ERROR) : null;
+  // Reconexión: el login normal no fuerza el consentimiento, así que este es el
+  // único camino que reemite el refresh_token cuando se pierde el acceso a Gmail.
+  const isReconnect = reconnect === "1";
 
   return (
     <main className="flex flex-1 lg:grid lg:grid-cols-[55fr_45fr]">
@@ -78,10 +81,12 @@ export default async function LoginPage({
           <div className="w-full max-w-sm space-y-8 rounded-2xl bg-card p-8 text-center shadow-[0_24px_60px_-15px_rgba(0,0,0,0.45)] lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none">
             <div className="space-y-3">
               <h1 className="font-heading text-3xl font-medium tracking-tight sm:text-4xl">
-                Entra a Bernie Wallet
+                {isReconnect ? "Reconecta tu Gmail" : "Entra a Bernie Wallet"}
               </h1>
               <p className="text-base text-muted-foreground">
-                Conecta tu Gmail para registrar tus gastos.
+                {isReconnect
+                  ? "Vuelve a dar el permiso de lectura de correos para seguir sincronizando."
+                  : "Conecta tu Gmail para registrar tus gastos."}
               </p>
             </div>
 
@@ -94,7 +99,7 @@ export default async function LoginPage({
               </p>
             )}
 
-            <GoogleSignInButton className="w-full" />
+            <GoogleSignInButton className="w-full" reconnect={isReconnect} />
 
             {/* Desktop: nota breve (las garantías ya viven en el panel) */}
             <p className="hidden items-center justify-center gap-1.5 text-xs text-muted-foreground lg:flex">
