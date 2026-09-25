@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bernie Wallet | Your Expenses Log Themselves
 
-## Getting Started
+![Next.js](https://img.shields.io/badge/next.js_16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/typescript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)
+![Gmail API](https://img.shields.io/badge/gmail_api-EA4335?style=for-the-badge&logo=gmail&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/tailwindcss-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![PWA](https://img.shields.io/badge/PWA-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white)
 
-First, run the development server:
+**Live:** [bernie-wallet.vercel.app](https://bernie-wallet.vercel.app)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+A personal finance app for Peru that fills itself in. Bernie reads the notification emails your bank sends you, through **read-only Gmail access**, and turns each one into a categorized expense. No manual entry, no bank credentials.
+
+The UI is in Spanish, for its target users.
+
+## How it works
+
+1. **Connect:** sign in with Google and grant read-only access to Gmail.
+2. **Bernie reads:** it finds your bank's notifications and extracts amount, merchant, card and category.
+3. **You review:** adjust anything you want. Your monthly balance stays up to date.
+
+## Features
+
+- **Supported notifications:** credit and debit card purchases, service payments, Yape transfers and bank transfers (BCP and Yape).
+- **Programmatic parser:** a regex-based parser with no AI and no external API cost. It handles decimal commas, thousand separators and trailing punctuation. If it can read the amount but not the merchant, it skips the email instead of saving a degraded expense.
+- **Incremental sync:** the first sync covers the last 30 days. Later syncs continue from a cursor, oldest to newest, with no gaps.
+- **Resilient sync:** per-email retries with exponential backoff, plus a circuit breaker that stops the sync if the Gmail API looks down instead of discarding emails in bulk.
+- **Dashboard:** balance, stat tiles, category bars, monthly trend and payment method split with Recharts.
+- **Categories and payment methods:** default categories on sign-up, fully editable.
+- **Manual expenses** for cash or anything without an email.
+- **Installable PWA** with its own icons and a light / dark theme.
+- **Privacy and terms pages.**
+
+## Security and privacy
+
+- **Least privilege:** the app requests only the Gmail read-only scope and only searches for known bank senders.
+- **Encrypted refresh tokens:** Google refresh tokens are stored encrypted with **AES-256-GCM** (random IV and auth tag per token).
+- **Row Level Security:** every user table in Postgres has RLS policies, so each user can only read their own rows.
+- **No bank credentials:** Bernie never asks for bank passwords or card numbers. Card numbers in emails are already masked by the bank.
+
+## Architecture
+
+```
+app/(auth)/            Google sign-in
+app/(dashboard)/       Dashboard, activity, categories and settings
+app/api/sync/          Sync endpoint: Gmail search, parse, store
+app/onboarding/        First-run setup
+lib/gmail/             Gmail API client (token refresh, search, read)
+lib/parser/            Email parser + tests (node:test)
+lib/crypto.ts          AES-256-GCM encryption for tokens
+supabase/migrations/   Versioned schema with RLS policies
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tech stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Layer | Tools |
+| --- | --- |
+| Framework | Next.js 16 (App Router), React 19, TypeScript |
+| Backend | Supabase (Postgres, Auth, RLS), Route Handlers, Server Actions |
+| Integrations | Gmail API, Google OAuth |
+| UI | Tailwind CSS v4, shadcn/ui, Base UI, Recharts, Sonner |
+| Testing | `node:test` |
+| Deploy | Vercel |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Getting started
 
-## Learn More
+1. Install dependencies:
 
-To learn more about Next.js, take a look at the following resources:
+   ```bash
+   npm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2. Copy `.env.example` to `.env.local` and fill in Supabase, Google OAuth and the token encryption key. The file explains how to generate each value.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3. Apply the database migrations:
 
-## Deploy on Vercel
+   ```bash
+   npm run db:push
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. Start the dev server:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   ```bash
+   npm run dev
+   ```
+
+Run the parser tests with `npm test`.
