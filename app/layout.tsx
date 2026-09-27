@@ -22,6 +22,9 @@ const fraunces = Fraunces({
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const OG_TITLE = "Bernie Wallet — Your expenses, logged automatically";
+const OG_DESCRIPTION =
+  "Bernie reads your bank's email notifications, recognizes every purchase, and categorizes it for you. Read-only Gmail access, encrypted, always up to date.";
 const DESCRIPTION =
   "Bernie lee los correos de tu banco (BCP), reconoce cada consumo y lo organiza por ti. Solo lectura de tu Gmail, cifrado y siempre al día.";
 
@@ -47,18 +50,20 @@ export const metadata: Metadata = {
     "Perú",
     "gastos automáticos",
   ],
+  // La tarjeta al compartir el link va en inglés (LinkedIn, portafolio);
+  // el título y la descripción de la página siguen en español para el SEO local.
   openGraph: {
     type: "website",
-    locale: "es_PE",
+    locale: "en_US",
     url: "/",
     siteName: "Bernie Wallet",
-    title: "Bernie Wallet — Tus gastos se anotan solos",
-    description: DESCRIPTION,
+    title: OG_TITLE,
+    description: OG_DESCRIPTION,
   },
   twitter: {
     card: "summary_large_image",
-    title: "Bernie Wallet — Tus gastos se anotan solos",
-    description: DESCRIPTION,
+    title: OG_TITLE,
+    description: OG_DESCRIPTION,
   },
   robots: { index: true, follow: true },
 };

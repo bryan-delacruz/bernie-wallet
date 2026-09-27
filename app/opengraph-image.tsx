@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 // Imagen que representa la marca al compartir el link (WhatsApp, redes, etc.).
-export const alt = "Bernie Wallet — Tus gastos se anotan solos";
+export const alt = "Bernie Wallet — Your expenses, logged automatically";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -36,15 +36,15 @@ export default function OpengraphImage() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <div style={{ fontSize: 82, fontWeight: 600, lineHeight: 1.02, letterSpacing: -2, maxWidth: 900 }}>
-            Tus gastos se anotan solos.
+            Your expenses, logged automatically.
           </div>
           <div style={{ fontSize: 30, color: "rgba(246,244,239,0.82)", maxWidth: 820 }}>
-            Bernie lee los correos de tu banco y registra cada gasto por ti.
+            Bernie reads your bank emails and logs every expense for you.
           </div>
         </div>
 
         <div style={{ display: "flex", fontSize: 24, color: "rgba(246,244,239,0.7)", fontFamily: "monospace" }}>
-          S/ · solo lectura de tu Gmail · cifrado
+          read-only Gmail · encrypted · always up to date
         </div>
       </div>
     ),
