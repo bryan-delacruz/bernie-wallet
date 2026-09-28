@@ -82,6 +82,11 @@ export async function POST() {
   if (!user) {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   }
+  if (user.is_anonymous) {
+    return NextResponse.json({
+      message: "En la demo los gastos ya vienen cargados. Con tu cuenta se leen de Gmail.",
+    });
+  }
 
   try {
     // Bancos conectados del usuario → { system_bank_id: user_bank_id }

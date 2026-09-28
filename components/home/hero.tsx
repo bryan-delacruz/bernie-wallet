@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Lock } from "lucide-react";
 import { BalanceGem } from "@/components/home/balance-gem";
 import { CtaButton } from "@/components/home/cta-button";
@@ -26,6 +27,13 @@ export function Hero() {
             <Lock className="size-3.5" />
             Solo lectura de tu Gmail · cifrado.
           </p>
+          <Link
+            href="/demo"
+            prefetch={false}
+            className="text-sm font-medium text-[#0e7c58] underline-offset-4 hover:underline"
+          >
+            O prueba la demo, sin cuenta ni Gmail
+          </Link>
         </div>
       </div>
 
