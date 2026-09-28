@@ -4,7 +4,7 @@
 -- cascada (users → user_banks, payment_methods, categories, expenses…).
 -- Requiere activar "Allow anonymous sign-ins" en Authentication → Sign In / Providers.
 
-create extension if not exists pg_cron;
+create extension if not exists pg_cron with schema pg_catalog;
 
 select cron.schedule(
   'bernie-delete-demo-users',
