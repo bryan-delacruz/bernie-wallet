@@ -7,7 +7,7 @@
 ![TailwindCSS](https://img.shields.io/badge/tailwindcss-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white)
 
-**Live:** [bernie-wallet.vercel.app](https://bernie-wallet.vercel.app)
+**Live:** [bernie-wallet.vercel.app](https://bernie-wallet.vercel.app) — click **"O prueba la demo"** to explore three months of sample expenses without Google or Gmail. Each visitor gets a temporary anonymous account (isolated by RLS) that is deleted after 24 hours.
 
 A personal finance app for Peru that fills itself in. Bernie reads the notification emails your bank sends you, through **read-only Gmail access**, and turns each one into a categorized expense. No manual entry, no bank credentials.
 
