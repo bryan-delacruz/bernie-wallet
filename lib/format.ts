@@ -16,14 +16,18 @@ export function formatShortDate(iso: string): string {
   }).format(new Date(iso));
 }
 
+// Construir un Intl.DateTimeFormat es caro y este se llama varias veces por render
+// (los atajos de rango del dashboard): se crea una sola vez por módulo.
+const limaDayFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: LIMA_TZ,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 /** ISO → "YYYY-MM-DD" en horario de Lima (para inputs type="date"). */
 export function toLimaDateInput(iso: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: LIMA_TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(iso));
+  return limaDayFmt.format(new Date(iso));
 }
 
 /** Etiqueta de mes "Junio 2026" (capitalizada), en horario de Lima. */
@@ -58,4 +62,20 @@ export function limaMonthRange(now: Date): {
   const end = new Date(Date.UTC(year, month, 1, LIMA_OFFSET_HOURS, 0, 0));
 
   return { startIso: start.toISOString(), endIso: end.toISOString(), label: formatMonthLabel(start) };
+}
+
+/** Hoy en Lima como "YYYY-MM-DD" (el formato de los inputs type="date"). */
+export function limaToday(now: Date = new Date()): string {
+  return toLimaDateInput(now.toISOString());
+}
+
+/**
+ * Corre un día "YYYY-MM-DD" hacia atrás. `days` resta días; `months` resta meses
+ * de calendario. Opera sobre la fecha civil (sin hora), así que no la afecta la
+ * zona horaria: el día se interpreta tal cual viene.
+ */
+export function shiftDay(day: string, { days = 0, months = 0 }): string {
+  const [year, month, date] = day.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1 - months, date - days));
+  return shifted.toISOString().slice(0, 10);
 }

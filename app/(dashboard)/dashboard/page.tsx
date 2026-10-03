@@ -8,6 +8,7 @@ import { BalanceCard } from "@/components/dashboard/balance-card";
 import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { StatTiles } from "@/components/dashboard/stat-tiles";
 import { CategoryBars, PaymentSplit, MonthlyTrend } from "@/components/dashboard/lazy-charts";
+import { categoryBlockHeight } from "@/components/dashboard/chart-metrics";
 import { formatCurrency, formatShortDate, limaMonthRange } from "@/lib/format";
 
 const LIMA_TZ = "America/Lima";
@@ -170,22 +171,40 @@ export default async function DashboardPage({
   const periodTotal = totals[0].total;
   const primaryRows = rows.filter((r) => (r.currency ?? "PEN") === cur);
 
-  // Desglose por categoría (top 5 + otros).
+  // Desglose principal (top 5 + otros). Con UNA categoría filtrada se baja un nivel
+  // y se agrupa por subcategoría: ahí "A dónde va tu plata" por categoría sería una
+  // sola barra, que no dice nada.
   const catName = new Map((cats ?? []).map((c) => [c.id, c.name]));
   const subToCat = new Map(subList.map((s) => [s.id, s.category_id as string]));
-  const byCategory = new Map<string, number>();
+  const subName = new Map(subList.map((s) => [s.id, s.name as string]));
+  const drilledCategoryId = catIds.length === 1 ? catIds[0] : null;
+  const drilledCategoryName = drilledCategoryId ? catName.get(drilledCategoryId) : undefined;
+
+  const byGroup = new Map<string, { amount: number; id?: string }>();
   for (const r of primaryRows) {
-    const catId = r.subcategory_id ? subToCat.get(r.subcategory_id) : null;
-    const name = (catId && catName.get(catId)) || "Sin categoría";
-    byCategory.set(name, (byCategory.get(name) ?? 0) + Number(r.amount));
+    let label: string;
+    let id: string | undefined;
+    if (drilledCategoryId) {
+      label = (r.subcategory_id && subName.get(r.subcategory_id)) || "Sin subcategoría";
+    } else {
+      const catId = r.subcategory_id ? subToCat.get(r.subcategory_id) : null;
+      label = (catId && catName.get(catId)) || "Sin categoría";
+      id = catId ?? undefined;
+    }
+    const entry = byGroup.get(label) ?? { amount: 0, id };
+    entry.amount += Number(r.amount);
+    byGroup.set(label, entry);
   }
-  const sortedCats = [...byCategory.entries()]
-    .map(([label, amount]) => ({ label, amount }))
+  const sortedGroups = [...byGroup.entries()]
+    .map(([label, { amount, id }]) => ({ label, amount, id }))
     .sort((a, b) => b.amount - a.amount);
   const categoryItems =
-    sortedCats.length > 6
-      ? [...sortedCats.slice(0, 5), { label: "Otros", amount: sortedCats.slice(5).reduce((s, i) => s + i.amount, 0) }]
-      : sortedCats;
+    sortedGroups.length > 6
+      ? [
+          ...sortedGroups.slice(0, 5),
+          { label: "Otros", amount: sortedGroups.slice(5).reduce((s, i) => s + i.amount, 0) },
+        ]
+      : sortedGroups;
 
   // Desglose por medio de pago.
   const methodType = new Map((methods ?? []).map((m) => [m.id, m.type as string]));
@@ -224,6 +243,10 @@ export default async function DashboardPage({
   const hi = to || todayLima;
   const periodDays = hasDateFilter ? Math.max(1, daysBetween(lo, hi) + 1) : Math.max(1, curDay);
   const dailyAvg = periodTotal / periodDays;
+  // Ritmo semanal del mismo periodo. Con menos de una semana de datos es una
+  // extrapolación, no una medición: se rotula con "≈" para que se lea como tal.
+  const weeklyAvg = dailyAvg * 7;
+  const weeklyHint = `${periodDays < 7 ? "≈ " : ""}${formatCurrency(weeklyAvg, cur)} por semana`;
 
   let deltaPct: number | null = null;
   let deltaHint: string | undefined;
@@ -231,8 +254,10 @@ export default async function DashboardPage({
   let statTiles: { label: string; value: string; hint?: string; estimate?: boolean }[];
   if (hasDateFilter) {
     statTiles = [
+      // Mismo orden que en modo mes actual: al cambiar de periodo solo debe
+      // aparecer o desaparecer Proyección, nunca moverse los otros tiles.
+      { label: "Prom. diario", value: formatCurrency(dailyAvg, cur), hint: weeklyHint },
       { label: "Movimientos", value: String(movimientos) },
-      { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
     ];
   } else {
     // Con pocos días transcurridos, el promedio diario es ruido: un solo cargo
@@ -251,7 +276,7 @@ export default async function DashboardPage({
     }
     projection = comparable ? dailyAvg * daysInMonth : null;
     statTiles = [
-      { label: "Prom. diario", value: formatCurrency(dailyAvg, cur) },
+      { label: "Prom. diario", value: formatCurrency(dailyAvg, cur), hint: weeklyHint },
       { label: "Movimientos", value: String(movimientos) },
       ...(projection !== null
         ? [
@@ -279,6 +304,16 @@ export default async function DashboardPage({
       : from
         ? `Desde ${fmtDay(from)}`
         : `Hasta ${fmtDay(to)}`;
+
+  // URL del nivel anterior del desglose: la misma vista sin el filtro de categoría.
+  const backToCategoriesHref = (() => {
+    const next = new URLSearchParams();
+    if (from) next.set("from", from);
+    if (to) next.set("to", to);
+    if (method) next.set("method", method);
+    const query = next.toString();
+    return query ? `/dashboard?${query}` : "/dashboard";
+  })();
 
   const hasData = movimientos > 0;
   const hasTrend = months.some((m) => m.total > 0);
@@ -315,16 +350,44 @@ export default async function DashboardPage({
           <div className={cn("grid grid-cols-1 gap-4", chartCount > 1 && "lg:grid-cols-2")}>
             {categoryItems.length > 0 && (
               <section className="space-y-3">
-                <h2 className={SECTION_TITLE}>A dónde va tu plata</h2>
-                <div className="rounded-xl border border-border bg-card p-4">
-                  <CategoryBars items={categoryItems} currency={cur} />
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className={SECTION_TITLE}>
+                    {drilledCategoryName
+                      ? `Dentro de ${drilledCategoryName}`
+                      : "A dónde va tu plata"}
+                  </h2>
+                  {drilledCategoryName ? (
+                    <Link
+                      href={backToCategoriesHref}
+                      className="text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                      scroll={false}
+                    >
+                      Ver todas las categorías
+                    </Link>
+                  ) : null}
+                </div>
+                {/* Se reserva el alto final: el gráfico llega por import dinámico y
+                    sin esto el contenido de abajo saltaría al montarlo. */}
+                <div
+                  className="rounded-xl border border-border bg-card p-4"
+                  style={{ minHeight: categoryBlockHeight(categoryItems.length) + 32 }}
+                >
+                  <CategoryBars
+                    items={categoryItems}
+                    currency={cur}
+                    drillable={!drilledCategoryId}
+                  />
                 </div>
               </section>
             )}
 
             {paymentItems.length > 0 && (
               <section className="space-y-3">
-                <h2 className={SECTION_TITLE}>Por medio de pago</h2>
+                <h2 className={SECTION_TITLE}>
+                  {drilledCategoryName
+                    ? `Por medio de pago · ${drilledCategoryName}`
+                    : "Por medio de pago"}
+                </h2>
                 <div className="rounded-xl border border-border bg-card p-4">
                   <PaymentSplit items={paymentItems} currency={cur} />
                 </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,10 +51,22 @@ export function ExpenseList({
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
   const [duplicating, setDuplicating] = useState<ExpenseRow | null>(null);
 
+  // Índice id → nombre para pintar la categoría de cada gasto sin recorrer la
+  // lista por fila; se rehace solo si cambian las categorías.
+  const categoryNameById = useMemo(
+    () => new Map(categories.map((c) => [c.id, c.name])),
+    [categories],
+  );
+
   return (
     <>
       <ul className="overflow-hidden rounded-xl border border-border bg-card">
-        {expenses.map((expense) => (
+        {expenses.map((expense) => {
+          const categoryName = expense.subcategories
+            ? categoryNameById.get(expense.subcategories.category_id)
+            : undefined;
+
+          return (
           <li key={expense.id} className="border-b border-border last:border-b-0">
             <button
               type="button"
@@ -65,18 +77,21 @@ export function ExpenseList({
                 <p className="truncate text-sm font-medium">{expense.merchant}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                   <span>{formatShortDate(expense.occurred_at)}</span>
+                  {/* Jerarquía por peso, no por cápsulas: la subcategoría (el dato
+                      más específico) lleva píldora; categoría y medio quedan en
+                      texto. El origen solo se marca cuando es manual — "Sync" es
+                      el caso normal y no aporta. */}
+                  {categoryName && <span className="text-foreground/70">{categoryName}</span>}
                   <span className="rounded-full bg-muted px-2 py-0.5">
                     {expense.subcategories?.name ?? "Sin categoría"}
                   </span>
                   {expense.payment_methods && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">
+                    <span className="text-foreground/70">
                       {TIPO_LABEL[expense.payment_methods.type] ?? expense.payment_methods.type}{" "}
                       {expense.payment_methods.identifier}
                     </span>
                   )}
-                  <span className="rounded-full bg-muted px-2 py-0.5">
-                    {expense.source === "sync" ? "Sync" : "Manual"}
-                  </span>
+                  {expense.source === "manual" ? <span>Manual</span> : null}
                 </div>
               </div>
               <span className="shrink-0 text-sm font-semibold tabular-nums text-expense">
@@ -84,7 +99,8 @@ export function ExpenseList({
               </span>
             </button>
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       <Dialog
