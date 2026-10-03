@@ -621,7 +621,11 @@ token leería **todo**, incluido `google_tokens`. Por eso:
 - `api_rate_limits` — `(client_id, user_id, window_start)` PK, `count`.
 
 **Tablas personales** (RLS de dueño + restrictiva OAuth):
-- `integration_shares` — `(user_id, client_id, category_id)` PK, `created_at`.
+- `integration_connections` — `(user_id, client_id)` PK, `shares_version` int
+  (sube con cada cambio de categorías compartidas; un cursor con otra versión →
+  `cursor_reset`), `created_at`, `updated_at`. Borrarla = desconectar (cascada a shares).
+- `integration_shares` — `(user_id, client_id, category_id)` PK, `created_at`,
+  FK a `integration_connections`.
 - `integration_audit` — `user_id`, `client_id`, `action`
   (`granted | shares_changed | revoked`), `detail` jsonb, `created_at`. Solo lectura
   para el usuario: es su historial de accesos.
@@ -632,6 +636,13 @@ token leería **todo**, incluido `google_tokens`. Por eso:
 - `expense_tombstones` — `expense_id`, `user_id`, `deleted_at`, llenada por trigger
   `after delete` en `expenses`. Se purgan a los 90 días (pg_cron); un cursor más
   viejo que eso recibe `reset`.
+
+**Funciones** (`security definer`, `search_path = ''`, solo `authenticated`):
+`shared_expense_changes(since_ts, since_id, shares_version, limit)`,
+`integration_shares_version()`, `consume_rate_limit(limit)`,
+`revoke_integration(client_id)` (una app solo puede revocarse a sí misma; si
+revoca el usuario, se encola `grant.revoked`). `cursor_reset` se lanza con
+`errcode = 'PT409'` para que PostgREST responda 409.
 
 **Triggers que encolan eventos** (solo si el usuario tiene una app conectada):
 cambios en gastos de una categoría compartida, y cambios en `integration_shares`
