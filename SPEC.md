@@ -477,6 +477,24 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 > **Alturas derivadas del contenido.** El desglose por categoría calcula su alto por
 > número de filas (~34px por fila, con mínimo y máximo) en vez de un alto fijo: con
 > una sola categoría el alto fijo producía una barra desproporcionada.
+>
+> **Creación al paso de categoría y subcategoría (hito 8.1).** En el formulario de
+> gasto (agregar **y** editar) los campos Categoría y Subcategoría son **combobox**
+> (`components/ui/creatable-combobox.tsx`, sobre la primitiva Combobox de Base UI) en
+> vez de `<select>`: al escribir un nombre que no existe aparece la opción
+> `+ Crear "X"`. Así se categoriza un gasto sin salir de Activity.
+>
+> - El formulario envía `categoryId` o `categoryName`, y `subcategoryId` o
+>   `subcategoryName`. La Server Action **resuelve antes de guardar el gasto**:
+>   busca por nombre **sin distinguir mayúsculas** y reutiliza la fila existente si
+>   la hay, crea lo que falte, y recién entonces inserta/actualiza el gasto.
+> - Una subcategoría nueva **exige** categoría (existente o nueva). Una categoría
+>   nueva sin subcategoría se crea igual y el gasto queda sin subcategoría — mismo
+>   comportamiento que hoy al elegir solo categoría.
+> - Nombres con `trim` y máximo 40 caracteres. Si la creación falla, el gasto **no**
+>   se guarda y la action devuelve el error.
+> - Al crear algo se revalida también `/categories`, para que la categoría nueva
+>   aparezca ahí sin recargar.
 
 9. **Categories**.
 10. **Settings**.

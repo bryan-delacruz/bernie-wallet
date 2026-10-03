@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogFooter } from "@/components/ui/dialog";
+import {
+  CreatableCombobox,
+  NO_SELECTION,
+  type ComboboxValue,
+} from "@/components/ui/creatable-combobox";
 
 export type CategoryOption = {
   id: string;
@@ -27,6 +32,15 @@ export type ExpenseInitial = {
 
 const SELECT_CLASS =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
+
+/** Valor inicial del combobox a partir del id guardado en el gasto. */
+function toInitialValue(
+  options: { id: string; name: string }[],
+  id: string | undefined,
+): ComboboxValue {
+  const found = id ? options.find((o) => o.id === id) : undefined;
+  return found ? { kind: "existing", id: found.id, name: found.name } : NO_SELECTION;
+}
 
 function todayLocal(): string {
   const d = new Date();
@@ -59,12 +73,37 @@ export function ExpenseForm({
   deleteSlot,
   successMessage,
 }: ExpenseFormProps) {
-  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
+  const [category, setCategory] = useState<ComboboxValue>(() =>
+    toInitialValue(categories, initial?.categoryId),
+  );
+  const [subcategory, setSubcategory] = useState<ComboboxValue>(() =>
+    toInitialValue(
+      categories.find((c) => c.id === initial?.categoryId)?.subcategories ?? [],
+      initial?.subcategoryId,
+    ),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const subcategories =
-    categories.find((c) => c.id === categoryId)?.subcategories ?? [];
+  // Opciones estables: el combobox memoiza su lista filtrada a partir de ellas,
+  // así que un array nuevo por render invalidaría esa memo en cada tecla.
+  const categoryOptions = useMemo(
+    () => categories.map((c) => ({ id: c.id, name: c.name })),
+    [categories],
+  );
+  const subcategories = useMemo(
+    () =>
+      category.kind === "existing"
+        ? (categories.find((c) => c.id === category.id)?.subcategories ?? [])
+        : [],
+    [categories, category],
+  );
+
+  // Cambiar de categoría invalida la subcategoría elegida: pertenece a la anterior.
+  function onCategoryChange(next: ComboboxValue) {
+    setCategory(next);
+    setSubcategory(NO_SELECTION);
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -133,39 +172,41 @@ export function ExpenseForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="category">Categoría</Label>
-          <select
+          <CreatableCombobox
             id="category"
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className={SELECT_CLASS}
-          >
-            <option value="">Sin categoría</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            options={categoryOptions}
+            value={category}
+            onValueChange={onCategoryChange}
+            placeholder="Sin categoría"
+            emptyMessage="Escribe para crear una"
+          />
+          {category.kind === "existing" && (
+            <input type="hidden" name="categoryId" value={category.id} />
+          )}
+          {category.kind === "new" && (
+            <input type="hidden" name="categoryName" value={category.name} />
+          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="subcategory">Subcategoría</Label>
-          <select
+          <CreatableCombobox
             id="subcategory"
-            name="subcategoryId"
-            defaultValue={initial?.subcategoryId ?? ""}
-            className={SELECT_CLASS}
-            disabled={subcategories.length === 0}
-          >
-            <option value="">{subcategories.length ? "Sin especificar" : "—"}</option>
-            {subcategories.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+            options={subcategories}
+            value={subcategory}
+            onValueChange={setSubcategory}
+            placeholder={category.kind === "none" ? "Elige categoría" : "Sin especificar"}
+            emptyMessage="Escribe para crear una"
+            disabled={category.kind === "none"}
+          />
+          {subcategory.kind === "existing" && (
+            <input type="hidden" name="subcategoryId" value={subcategory.id} />
+          )}
+          {subcategory.kind === "new" && (
+            <input type="hidden" name="subcategoryName" value={subcategory.name} />
+          )}
         </div>
       </div>
 
