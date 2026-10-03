@@ -1,6 +1,6 @@
 # SPEC.md — Bernie Wallet
 
-> **Fuente de verdad (Spec-Driven Development).** Este documento manda. Ningún código puede contradecir esta spec. Si algo cambia, **primero se actualiza esta spec, luego el código**. Última actualización: 2026-06-28.
+> **Fuente de verdad (Spec-Driven Development).** Este documento manda. Ningún código puede contradecir esta spec. Si algo cambia, **primero se actualiza esta spec, luego el código**. Última actualización: 2026-10-03.
 
 ---
 
@@ -356,6 +356,8 @@ y automáticamente en CI (`.github/workflows/ci.yml`) en cada PR y push a `main`
 | `GOOGLE_CLIENT_ID` | servidor | Refrescar el access token de Gmail |
 | `GOOGLE_CLIENT_SECRET` | servidor | Refrescar el access token de Gmail |
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | servidor | Clave AES-256-GCM (32 bytes base64) para cifrar el refresh token |
+| `INTEGRATION_SECRET_KEY` | servidor | AES-256-GCM para cifrar los secretos de webhook de las apps conectadas — §15 |
+| `INTERNAL_CRON_SECRET` | servidor | Protege `/api/internal/webhooks/deliver` (lo llama pg_cron) — §15 |
 
 ---
 
@@ -501,6 +503,7 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 11. **Gmail + Parser + Sync** (solo si eligió BCP).
 12. **Páginas legales** (`/privacy`, `/terms`) — requisito para publicar la app
     OAuth de Google. Ver §14.
+13. **Apps conectadas** (Casorio Club vía OAuth 2.1) — ver §15. *(propuesta)*
 
 ---
 
@@ -549,3 +552,203 @@ requisitos de **Limited Use**. Además describe:
   para entrenar modelos;
 - cómo revocar el acceso (`myaccount.google.com/permissions`) y cómo pedir el
   borrado de la cuenta.
+
+---
+
+## 15. Apps conectadas: Casorio Club vía OAuth 2.1 (hito 13)
+
+> **Estado: propuesta, pendiente de aprobación.** Nada de esta sección se implementa
+> hasta que se apruebe. Contrato del lado cliente: `docs/integracion-bernie.md` en
+> el repo de Casorio Club. Se diseña **listo para producción**: el contrato no cambia
+> si mañana se conectan más apps o se cambia el proveedor OAuth.
+
+### 15.1 Objetivo
+
+Que el usuario pueda **pasar a Casorio Club los gastos de las categorías que elija**
+(ej. "Matrimonio") con un botón **"Conectar con Bernie Wallet"**, como cualquier
+"Conectar con Google". Bernie es el **proveedor** (autorización + API de solo
+lectura); Casorio es el **cliente**. Casorio nunca escribe en Bernie.
+
+### 15.2 Estándares que se siguen
+
+| Área | Estándar | Cómo se aplica |
+|---|---|---|
+| Autorización | **OAuth 2.1** + **RFC 9700** (OAuth Security BCP) | Authorization code + **PKCE S256** obligatorio, `state` anti-CSRF, redirect URIs exactas, rotación de refresh tokens. Lo implementa el **OAuth 2.1 Server de Supabase Auth** (beta, gratis); Bernie pone la pantalla de consentimiento. |
+| Cliente | RFC 6749 §2.1 | Casorio = cliente **confidencial** (`client_secret_basic`). Registro dinámico **desactivado**. |
+| Mínimo privilegio | — | Solo categorías elegidas y solo `id`, fecha, monto, moneda, comercio, subcategoría. Nunca medio de pago, banco, nº de operación ni correo. |
+| Contrato de API | **OpenAPI 3.1** | `docs/api/openapi.yaml`, servido en `/api/v1/openapi.json`. Versión en la ruta (`/v1`); cambios incompatibles = `/v2`. |
+| Sincronización | Cursor incremental (patrón Plaid `transactions/sync`) | `added / modified / removed` desde un cursor opaco. |
+| Errores | **RFC 9457** Problem Details | `application/problem+json` con `type`, `title`, `status`, `detail`, `code`. |
+| Rate limiting | `429` + `Retry-After` + cabeceras `RateLimit-*` (borrador IETF) | 60 req/min por `(client_id, usuario)`. |
+| Webhooks | **Standard Webhooks** (standardwebhooks.com) | Cabeceras `webhook-id`, `webhook-timestamp`, `webhook-signature` (HMAC-SHA256), reintentos con backoff, entrega al menos una vez. |
+| Dinero | — | `amount` como **string decimal** en JSON (no float). |
+| Fechas | RFC 3339 | `occurredAt` en UTC. |
+
+### 15.3 Seguridad en la base de datos
+
+Un access token OAuth de Supabase es un JWT `authenticated` con el `sub` del usuario
+**más el claim `client_id`**. Con las políticas actuales (`user_id = auth.uid()`) ese
+token leería **todo**, incluido `google_tokens`. Por eso:
+
+1. **Política restrictiva en cada tabla personal** (las de §7.3 + las nuevas):
+   ```sql
+   create policy "no oauth clients" on <tabla>
+     as restrictive for all to authenticated
+     using ((auth.jwt() ->> 'client_id') is null);
+   ```
+2. **Un único camino de datos:** la función `shared_expense_changes(...)`
+   (`security definer`, `search_path = ''`, `execute` revocado a `public` y `anon`)
+   que filtra a mano por `auth.uid()`, por el `client_id` del token, por
+   `integration_clients.active` y por `integration_shares`.
+3. **Validación del token en la API:** firma, `iss` = proyecto de Bernie, `exp`, y
+   `client_id` presente y activo en `integration_clients`. Supabase no soporta
+   *resource indicators* (RFC 8707), así que el `aud` es el estándar
+   (`authenticated`); el `client_id` + la política restrictiva cumplen ese rol.
+4. **Llaves de firma asimétricas (ES256).** Se migra el proyecto a *JWT signing
+   keys* para validar tokens localmente contra el JWKS sin llamar a Auth. Es un
+   cambio de todo el proyecto: se hace con rotación (sin cortar sesiones) y con
+   aprobación explícita.
+
+### 15.4 Modelo de datos (migración `0009_oauth_integrations.sql`)
+
+**Tablas de sistema** (sin acceso de usuarios; solo `service_role`):
+- `integration_clients` — `client_id` text PK, `name`, `webhook_url`,
+  `webhook_secret` (cifrado AES-256-GCM con `lib/crypto.ts`), `active` bool,
+  `created_at`. Lista blanca de apps: reemplaza a una variable de entorno.
+- `integration_events` — *outbox* de webhooks: `id` uuid (= `webhook-id`),
+  `client_id`, `user_id`, `type`, `payload` jsonb, `attempts`, `next_attempt_at`,
+  `delivered_at`, `dead_at`, `last_error`, `created_at`.
+- `api_rate_limits` — `(client_id, user_id, window_start)` PK, `count`.
+
+**Tablas personales** (RLS de dueño + restrictiva OAuth):
+- `integration_shares` — `(user_id, client_id, category_id)` PK, `created_at`.
+- `integration_audit` — `user_id`, `client_id`, `action`
+  (`granted | shares_changed | revoked`), `detail` jsonb, `created_at`. Solo lectura
+  para el usuario: es su historial de accesos.
+
+**Cambios en `expenses`:**
+- `updated_at timestamptz not null default now()` + trigger que lo actualiza en
+  cada `update`. Es la base del cursor.
+- `expense_tombstones` — `expense_id`, `user_id`, `deleted_at`, llenada por trigger
+  `after delete` en `expenses`. Se purgan a los 90 días (pg_cron); un cursor más
+  viejo que eso recibe `reset`.
+
+**Triggers que encolan eventos** (solo si el usuario tiene una app conectada):
+cambios en gastos de una categoría compartida, y cambios en `integration_shares`
+→ insertan en `integration_events` el tipo `expenses.sync_available` (uno por
+usuario y cliente, deduplicado mientras haya uno pendiente).
+
+### 15.5 Flujo de autorización
+
+1. Casorio redirige a `…/auth/v1/oauth/authorize` (PKCE S256, `state`, `scope=email`).
+2. Supabase redirige a **`/oauth/consent?authorization_id=…`**.
+3. Sin sesión → `/login?next=…`. **Nuevo:** `/login` y el callback respetan `next`
+   solo si es una ruta interna (empieza con `/`, no con `//` ni `/\`): sin open
+   redirects. Usuario anónimo (demo) → "Necesitas una cuenta real para conectar apps".
+4. Pantalla de consentimiento: nombre de la app (de `getAuthorizationDetails`),
+   **qué compartirá** (campos de 15.2), **selector de categorías** (preselecciona
+   "Matrimonio" si existe; al menos una obligatoria), aviso "lo verán todos los
+   miembros de tu boda en Casorio", **Permitir / Cancelar**.
+5. Permitir → Server Action: guarda `integration_shares` + `integration_audit`
+   (`granted`) → `approveAuthorization()` → redirige con el código.
+   Cancelar → `denyAuthorization()`.
+6. Si ya había autorizado (no viene `authorization_id`), redirige directo.
+
+### 15.6 API v1
+
+Todas: `Authorization: Bearer <access token OAuth>`, `runtime = "nodejs"`, sin
+caché (`Cache-Control: no-store`), errores RFC 9457, rate limit de 15.2, log
+estructurado por request (`client_id`, `user_id`, ruta, status, latencia; sin
+montos ni comercios).
+
+**`GET /api/v1/shared-expenses/sync?cursor=<opaco>&limit=<1..500, def. 200>`**
+```json
+{
+  "added":    [ { "id": "uuid", "occurredAt": "2026-10-01T15:04:05Z", "amount": "150.00",
+                  "currency": "PEN", "merchant": "…", "subcategory": "Fotógrafo" } ],
+  "modified": [ … mismo formato … ],
+  "removed":  [ "uuid" ],
+  "nextCursor": "opaco",
+  "hasMore": false
+}
+```
+- Sin `cursor` = sincronización inicial: todo en `added`.
+- El cursor es opaco para el cliente (base64url de `{v, ts, id, sharesVersion}`).
+  Orden estable por `(updated_at, id)`. Se relee una **ventana de 2 min** antes del
+  cursor para no perder transacciones que confirmaron tarde; el cliente es idempotente.
+- Un gasto que **sale** de una categoría compartida aparece en `removed`.
+- Si cambiaron las categorías compartidas o el cursor es más viejo que los
+  tombstones → `409` con `code: "cursor_reset"`: el cliente borra su cursor y
+  resincroniza desde cero.
+- `hasMore: true` → el cliente vuelve a llamar con `nextCursor`.
+
+**`POST /api/v1/connection/revoke`** — la app se desconecta a sí misma:
+revoca el permiso de ese `client_id` para ese usuario (`revokeGrant`; si el SDK
+no lo permite con un token OAuth, se hace con la Admin API del lado del servidor),
+borra sus `integration_shares` y registra `revoked` en la auditoría. Responde `204`.
+Supabase no expone RFC 7009, por eso existe este endpoint.
+
+**`GET /api/v1/openapi.json`** — el contrato (público).
+
+### 15.7 Webhooks (Standard Webhooks)
+
+- **Delgados:** no llevan datos de gastos, solo avisan. Si se filtran, no exponen nada.
+  ```json
+  { "type": "expenses.sync_available", "timestamp": "RFC 3339",
+    "data": { "userId": "uuid" } }
+  ```
+  Tipos: `expenses.sync_available`, `grant.revoked`.
+- Firma `v1,<base64(HMAC-SHA256(secret, id.timestamp.body))>` con el
+  `webhook_secret` del cliente.
+- **Entrega:** `after()` de `next/server` intenta enviar al momento; además
+  `pg_cron` + `pg_net` llaman cada minuto a `POST /api/internal/webhooks/deliver`
+  (protegido con un secreto) para los pendientes. Backoff exponencial
+  (1 min → 24 h, 8 intentos); luego `dead_at`.
+- El cliente debe responder `2xx` rápido; cualquier otro estado = reintento.
+- Los webhooks **no reemplazan** el pull: si se pierden, el cliente igual
+  sincroniza (Casorio: al abrir la bandeja).
+
+### 15.8 Configuración → "Apps conectadas"
+
+Por cada app (`getUserGrants()`): fecha de conexión, categorías compartidas
+(editables → evento `shares_changed`), historial de `integration_audit`, y
+**Desconectar** → `revokeGrant()` + borra shares + webhook `grant.revoked`.
+
+### 15.9 Configuración manual (la hace el usuario)
+
+1. Supabase → Authentication → OAuth Server: activar, authorization path
+   `/oauth/consent`. Verificar Site URL = dominio de producción.
+2. OAuth Apps → cliente **Casorio Club**, confidencial, redirect URIs exactas:
+   `https://casorio-club.vercel.app/api/bernie/callback` y
+   `http://localhost:3000/api/bernie/callback`. Secret → Vercel de Casorio.
+3. Fila en `integration_clients` con el `client_id`, la URL de webhook de Casorio y
+   su secreto (se genera con un script, nunca a mano en SQL).
+4. Migración a llaves JWT asimétricas (15.3.4).
+5. Variables de Bernie: `INTEGRATION_SECRET_KEY` (cifrado de secretos de webhook) e
+   `INTERNAL_CRON_SECRET`.
+
+> ⚠️ Base compartida (§11.1): la migración 0009 y la migración de llaves se aplican
+> a producción solo con aprobación explícita.
+
+### 15.10 Páginas legales
+
+`/privacy` hoy dice que no se comparten datos con terceros. Se actualiza: "solo con
+apps que **tú** conectas, solo las categorías que elijas; puedes ver el historial y
+desconectarlas en Configuración".
+
+### 15.11 Pruebas
+
+- `node:test`: validador de `next`; codificar/decodificar cursor; firma de
+  webhooks contra los vectores de prueba de Standard Webhooks; Problem Details.
+- **Contrato:** los ejemplos de `openapi.yaml` son fixtures; un test valida que la
+  respuesta real del endpoint los cumple. Casorio usa los mismos ejemplos (§10 de su spec).
+- SQL documentado en la migración (`set request.jwt.claims`): con `client_id` →
+  0 filas en todas las tablas personales; `shared_expense_changes` solo devuelve
+  categorías compartidas; un gasto movido de categoría sale en `removed`.
+
+### 15.12 Riesgos
+
+- **OAuth Server de Supabase en beta.** Mitigación: el contrato (OpenAPI, cursor,
+  webhooks) no depende de Supabase; si cambia, se reemplaza solo el servidor de
+  autorización sin tocar a los clientes.
+- **Una sola base compartida** (§11.1): antes de producción real, separar dev/prod.
