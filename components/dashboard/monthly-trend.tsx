@@ -8,6 +8,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/format";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 
 export type MonthDatum = {
   label: string;
@@ -35,6 +36,7 @@ function shortAmount(value: number, currency: string): string {
 }
 
 export function MonthlyTrend({ months, currency }: { months: MonthDatum[]; currency: string }) {
+  const reducedMotion = usePrefersReducedMotion();
   const hasProjection = months.some((m) => (m.projected ?? 0) > 0);
   const currentLabel = months.find((m) => m.current)?.label;
 
@@ -71,7 +73,12 @@ export function MonthlyTrend({ months, currency }: { months: MonthDatum[]; curre
               />
             }
           />
-          <Bar dataKey="total" stackId="month" radius={[4, 4, 0, 0]}>
+          <Bar
+            dataKey="total"
+            stackId="month"
+            radius={[4, 4, 0, 0]}
+            isAnimationActive={!reducedMotion}
+          >
             {months.map((m) => (
               <Cell key={m.label} fill="var(--color-total)" fillOpacity={m.current ? 1 : 0.3} />
             ))}
@@ -89,6 +96,7 @@ export function MonthlyTrend({ months, currency }: { months: MonthDatum[]; curre
               dataKey="projected"
               stackId="month"
               radius={[4, 4, 0, 0]}
+              isAnimationActive={!reducedMotion}
               fill="var(--color-projected)"
               fillOpacity={0.22}
               stroke="var(--card)"

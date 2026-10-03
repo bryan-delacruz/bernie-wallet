@@ -137,6 +137,20 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Tailwind v4 quitó el `cursor: pointer` que su preflight v3 daba a los botones:
+     sin esto, nada en la app se ve clicable al pasar el mouse. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+  /* El reset de Tailwind deja `outline-style: none`, así que un control sin clase
+     de foco propia quedaba sin ninguna marca al tabular. Los componentes que ya
+     traen su anillo (inputs, botones de shadcn) lo sobrescriben. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
   body {
     @apply bg-background text-foreground;
   }

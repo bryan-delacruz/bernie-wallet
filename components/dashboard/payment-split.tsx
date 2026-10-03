@@ -8,11 +8,13 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/format";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 
 export type SplitDatum = { label: string; amount: number; color: string };
 
 // Composición categórica → donut + leyenda rica (monto y %) para leerlo sin hover.
 export function PaymentSplit({ items, currency }: { items: SplitDatum[]; currency: string }) {
+  const reducedMotion = usePrefersReducedMotion();
   if (items.length === 0) return null;
   const total = items.reduce((sum, i) => sum + i.amount, 0);
 
@@ -34,7 +36,14 @@ export function PaymentSplit({ items, currency }: { items: SplitDatum[]; currenc
               />
             }
           />
-          <Pie data={items} dataKey="amount" nameKey="label" innerRadius={48} strokeWidth={2}>
+          <Pie
+            data={items}
+            dataKey="amount"
+            nameKey="label"
+            innerRadius={48}
+            strokeWidth={2}
+            isAnimationActive={!reducedMotion}
+          >
             {items.map((i) => (
               <Cell key={i.label} fill={i.color} />
             ))}
