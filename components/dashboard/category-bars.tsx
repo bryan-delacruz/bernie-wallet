@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import {
   type ChartConfig,
@@ -9,17 +10,44 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/format";
+import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
+import { categoryChartHeight } from "./chart-metrics";
 import { cn } from "@/lib/utils";
 
-export type CategoryDatum = { label: string; amount: number };
+/** `id` solo viene en el nivel de categorías: es lo que permite entrar al desglose. */
+export type CategoryDatum = { label: string; amount: number; id?: string };
 
 type SortMode = "amount" | "name";
 
 // Magnitud (una sola medida) → un solo tono esmeralda, no arcoíris.
 const config = { amount: { label: "Gasto", color: "var(--chart-1)" } } satisfies ChartConfig;
 
-export function CategoryBars({ items, currency }: { items: CategoryDatum[]; currency: string }) {
+export function CategoryBars({
+  items,
+  currency,
+  drillable = false,
+}: {
+  items: CategoryDatum[];
+  currency: string;
+  /** En el nivel de categorías, un clic filtra por esa categoría y entra a sus
+   *  subcategorías. Dentro del desglose ya no hay otro nivel al que bajar. */
+  drillable?: boolean;
+}) {
   const [sort, setSort] = useState<SortMode>("amount");
+  const reducedMotion = usePrefersReducedMotion();
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [, startTransition] = useTransition();
+
+  const drillInto = useCallback(
+    (id: string) => {
+      const next = new URLSearchParams(params.toString());
+      next.set("cat", id);
+      startTransition(() => router.replace(`${pathname}?${next.toString()}`, { scroll: false }));
+    },
+    [params, pathname, router],
+  );
 
   if (items.length === 0) return null;
 
@@ -32,8 +60,9 @@ export function CategoryBars({ items, currency }: { items: CategoryDatum[]; curr
   // Headroom en el eje para que la etiqueta del monto no se corte al borde.
   const max = Math.max(...sorted.map((i) => i.amount), 1);
   // Alto derivado de las filas: con un alto fijo, una sola categoría producía una
-  // barra desproporcionada y seis quedaban apretadas.
-  const chartHeight = Math.min(260, Math.max(96, sorted.length * 34 + 28));
+  // barra desproporcionada y seis quedaban apretadas. La página reserva este mismo
+  // alto mientras carga el chunk de Recharts.
+  const chartHeight = categoryChartHeight(sorted.length);
 
   return (
     <div className="space-y-3">
@@ -62,7 +91,20 @@ export function CategoryBars({ items, currency }: { items: CategoryDatum[]; curr
               <ChartTooltipContent formatter={(value) => formatCurrency(Number(value), currency)} />
             }
           />
-          <Bar dataKey="amount" fill="var(--color-amount)" radius={[0, 4, 4, 0]}>
+          <Bar
+            dataKey="amount"
+            fill="var(--color-amount)"
+            radius={[0, 4, 4, 0]}
+            isAnimationActive={!reducedMotion}
+            cursor={drillable ? "pointer" : undefined}
+            onClick={
+              drillable
+                ? (data: { payload?: CategoryDatum }) => {
+                    if (data.payload?.id) drillInto(data.payload.id);
+                  }
+                : undefined
+            }
+          >
             <LabelList
               dataKey="amount"
               position="right"

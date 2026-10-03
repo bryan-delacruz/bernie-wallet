@@ -5,7 +5,19 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { limaToday, shiftDay } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+/** Atajos de rango. `null` = sin fechas en la URL, que el dashboard lee como mes actual. */
+const RANGE_PRESETS: { key: string; label: string; shift: { days?: number; months?: number } | null }[] =
+  [
+    { key: "month", label: "Este mes", shift: null },
+    { key: "7d", label: "7 días", shift: { days: 6 } },
+    { key: "15d", label: "15 días", shift: { days: 14 } },
+    { key: "30d", label: "30 días", shift: { days: 29 } },
+    { key: "3m", label: "3 meses", shift: { months: 3, days: -1 } },
+    { key: "6m", label: "6 meses", shift: { months: 6, days: -1 } },
+  ];
 
 const CONTROL_CLASS =
   "h-9 rounded-md border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
@@ -64,6 +76,23 @@ export function DashboardFilters({
     [pathname, router],
   );
 
+  /** Aplica un atajo: escribe `from`/`to` de una sola vez (o los borra en "Este mes"). */
+  const applyPreset = useCallback(
+    (shift: { days?: number; months?: number } | null) => {
+      const next = new URLSearchParams(params.toString());
+      if (shift) {
+        const today = limaToday();
+        next.set("from", shiftDay(today, shift));
+        next.set("to", today);
+      } else {
+        next.delete("from");
+        next.delete("to");
+      }
+      startTransition(() => router.replace(`${pathname}?${next.toString()}`, { scroll: false }));
+    },
+    [params, pathname, router],
+  );
+
   const clearDates = useCallback(() => {
     const next = new URLSearchParams(params.toString());
     next.delete("from");
@@ -89,6 +118,42 @@ export function DashboardFilters({
   if (method) {
     activeChips.push({ key: "method", label: methodLabel.get(method) ?? method, remove: () => setParam("method", "") });
   }
+
+  // El atajo activo se deduce del rango en la URL, no de un estado aparte: así
+  // sobrevive a recargas y a enlaces compartidos. `hoy` se calcula una vez por
+  // render, no una por atajo.
+  const today = limaToday();
+  const activePreset = RANGE_PRESETS.find((preset) =>
+    preset.shift ? to === today && from === shiftDay(today, preset.shift) : !from && !to,
+  )?.key;
+
+  // Control segmentado, no chips sueltos: el rango es UNA elección. Los chips
+  // redondos de abajo son categorías, donde sí se activan varias — la forma dice
+  // cuál es cuál sin necesidad de explicarlo.
+  const presetChips = (
+    <div
+      role="group"
+      aria-label="Rango rápido"
+      className="inline-flex flex-wrap rounded-md border border-border p-0.5 text-xs"
+    >
+      {RANGE_PRESETS.map((preset) => (
+        <button
+          key={preset.key}
+          type="button"
+          onClick={() => applyPreset(preset.shift)}
+          aria-pressed={activePreset === preset.key}
+          className={cn(
+            "rounded px-2.5 py-1 transition-colors",
+            activePreset === preset.key
+              ? "bg-muted font-medium text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {preset.label}
+        </button>
+      ))}
+    </div>
+  );
 
   const dateInputs = (fullWidth: boolean) => (
     <>
@@ -161,6 +226,7 @@ export function DashboardFilters({
     <>
       {/* Desktop: barra inline */}
       <div className="hidden space-y-3 sm:block">
+        {presetChips}
         <div className="flex flex-wrap items-center gap-2">
           {dateInputs(false)}
           {methodSelect(false)}
@@ -223,6 +289,7 @@ export function DashboardFilters({
             <div className="flex flex-col gap-5 overflow-y-auto px-4 py-3">
               <div className="space-y-2">
                 <p className={LABEL_CLASS}>Rango de fechas</p>
+                {presetChips}
                 <div className="flex gap-2">{dateInputs(true)}</div>
               </div>
 
