@@ -576,7 +576,7 @@ lectura); Casorio es el **cliente**. Casorio nunca escribe en Bernie.
 | Autorización | **OAuth 2.1** + **RFC 9700** (OAuth Security BCP) | Authorization code + **PKCE S256** obligatorio, `state` anti-CSRF, redirect URIs exactas, rotación de refresh tokens. Lo implementa el **OAuth 2.1 Server de Supabase Auth** (beta, gratis); Bernie pone la pantalla de consentimiento. |
 | Cliente | RFC 6749 §2.1 | Casorio = cliente **confidencial** (`client_secret_basic`). Registro dinámico **desactivado**. |
 | Mínimo privilegio | — | Solo categorías elegidas y solo `id`, fecha, monto, moneda, comercio, subcategoría. Nunca medio de pago, banco, nº de operación ni correo. |
-| Contrato de API | **OpenAPI 3.1** | `docs/api/openapi.yaml`, servido en `/api/v1/openapi.json`. Versión en la ruta (`/v1`); cambios incompatibles = `/v2`. |
+| Contrato de API | **OpenAPI 3.1** | `docs/api/openapi.json`, servido en `/api/v1/openapi.json`. Versión en la ruta (`/v1`); cambios incompatibles = `/v2`. |
 | Sincronización | Cursor incremental (patrón Plaid `transactions/sync`) | `added / modified / removed` desde un cursor opaco. |
 | Errores | **RFC 9457** Problem Details | `application/problem+json` con `type`, `title`, `status`, `detail`, `code`. |
 | Rate limiting | `429` + `Retry-After` + cabeceras `RateLimit-*` (borrador IETF) | 60 req/min por `(client_id, usuario)`. |
@@ -751,7 +751,7 @@ desconectarlas en Configuración".
 
 - `node:test`: validador de `next`; codificar/decodificar cursor; firma de
   webhooks contra los vectores de prueba de Standard Webhooks; Problem Details.
-- **Contrato:** los ejemplos de `openapi.yaml` son fixtures; un test valida que la
+- **Contrato:** los ejemplos de `openapi.json` son fixtures; un test valida que la
   respuesta real del endpoint los cumple. Casorio usa los mismos ejemplos (§10 de su spec).
 - SQL documentado en la migración (`set request.jwt.claims`): con `client_id` →
   0 filas en todas las tablas personales; `shared_expense_changes` solo devuelve

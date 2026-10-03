@@ -327,10 +327,11 @@ returns table (
   id          uuid,
   removed     boolean,
   occurred_at timestamptz,
-  amount      numeric,
+  amount      text,        -- texto: el JSON de PostgREST convertiría numeric a float
   currency    text,
   merchant    text,
   subcategory text,
+  created_at  timestamptz, -- created_at > cursor → added; si no → modified
   changed_at  timestamptz
 )
 language plpgsql stable security definer set search_path = '' as $$
@@ -362,14 +363,14 @@ begin
   changes as (
     select e.id,
            (sc.category_id is null or sc.category_id not in (select category_id from shared_categories)) as removed,
-           e.occurred_at, e.amount, e.currency, e.merchant, sc.name as subcategory,
-           e.updated_at as changed_at
+           e.occurred_at, e.amount::text as amount, e.currency, e.merchant, sc.name as subcategory,
+           e.created_at, e.updated_at as changed_at
     from public.expenses e
     left join public.subcategories sc on sc.id = e.subcategory_id
     where e.user_id = v_uid
       and (p_since_ts is null or (e.updated_at, e.id) > (p_since_ts, p_since_id))
     union all
-    select t.expense_id, true, null, null, null, null, null, t.deleted_at
+    select t.expense_id, true, null, null, null, null, null, null, t.deleted_at
     from public.expense_tombstones t
     where p_since_ts is not null
       and t.user_id = v_uid
@@ -381,6 +382,7 @@ begin
          case when c.removed then null else c.currency end,
          case when c.removed then null else c.merchant end,
          case when c.removed then null else c.subcategory end,
+         case when c.removed then null else c.created_at end,
          c.changed_at
   from changes c
   where p_since_ts is not null or not c.removed
