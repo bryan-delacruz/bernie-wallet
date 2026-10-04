@@ -22,8 +22,8 @@ export async function replaceShares(
   userId: string,
   clientId: string,
   categoryIds: string[],
-  action: "granted" | "shares_changed",
-): Promise<{ error?: string }> {
+  action: "granted" | "shares_changed" | null,
+): Promise<{ error?: string; categoryNames?: string[] }> {
   const unique = [...new Set(categoryIds)];
   const { data: owned } = await supabase
     .from("categories")
@@ -44,11 +44,16 @@ export async function replaceShares(
   );
   if (deleteError || insertError) return { error: "write_failed" };
 
-  await supabase.from("integration_audit").insert({
-    user_id: userId,
-    client_id: clientId,
-    action,
-    detail: { categories: owned.map((c) => c.name) },
-  });
-  return {};
+  const categoryNames = owned.map((c) => c.name);
+  // null = el llamador audita después (la pantalla de consentimiento solo
+  // registra "granted" si Supabase aprobó de verdad).
+  if (action) {
+    await supabase.from("integration_audit").insert({
+      user_id: userId,
+      client_id: clientId,
+      action,
+      detail: { categories: categoryNames },
+    });
+  }
+  return { categoryNames };
 }

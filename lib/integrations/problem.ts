@@ -5,6 +5,7 @@ export type ProblemCode =
   | "not_connected"
   | "cursor_reset"
   | "rate_limited"
+  | "unavailable"
   | "internal";
 
 const STATUS: Record<ProblemCode, number> = {
@@ -13,6 +14,7 @@ const STATUS: Record<ProblemCode, number> = {
   not_connected: 403,
   cursor_reset: 409,
   rate_limited: 429,
+  unavailable: 503,
   internal: 500,
 };
 
@@ -22,6 +24,7 @@ const TITLE: Record<ProblemCode, string> = {
   not_connected: "This app is not connected to the user's account",
   cursor_reset: "Cursor is no longer valid; restart the sync without a cursor",
   rate_limited: "Too many requests",
+  unavailable: "Temporarily unavailable; retry later",
   internal: "Internal error",
 };
 

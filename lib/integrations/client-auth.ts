@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supabase-js";
 import { problem } from "@/lib/integrations/problem";
 
 export type IntegrationContext = {
@@ -31,17 +31,40 @@ export async function authenticateClient(
     },
   );
 
-  // getClaims devuelve { error } si la firma no cuadra, pero LANZA si el token
-  // ni siquiera se puede decodificar. Las dos cosas son un 401, no un 500.
-  const result = await supabase.auth.getClaims(token).catch(() => null);
-  const error = result?.error ?? (result ? null : true);
-  const claims = result?.data?.claims;
+  // Token mal formado → 401. Pero si Supabase no responde (getClaims valida
+  // llamando a Auth con llaves HS256), es un 503: un 401 haría creer a la app
+  // que el usuario la desconectó y la obligaría a reconectar por una caída.
+  if (!looksLikeJwt(token)) return problem("unauthorized");
+  let result;
+  try {
+    result = await supabase.auth.getClaims(token);
+  } catch {
+    return problem("unavailable");
+  }
+  if (result.error) {
+    const transient = isAuthRetryableFetchError(result.error) || (result.error.status ?? 0) >= 500;
+    return problem(transient ? "unavailable" : "unauthorized");
+  }
+  const claims = result.data?.claims;
   const clientId = claims?.client_id;
-  if (error || !claims?.sub || typeof clientId !== "string") {
+  if (!claims?.sub || typeof clientId !== "string") {
     return problem("unauthorized");
   }
 
   return { supabase, token, userId: claims.sub, clientId };
+}
+
+/** Tres partes base64url con header y payload JSON; si no, ni se intenta validar. */
+function looksLikeJwt(token: string) {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+    JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Códigos de Postgres/PostgREST que lanzan las funciones de la migración 0009. */

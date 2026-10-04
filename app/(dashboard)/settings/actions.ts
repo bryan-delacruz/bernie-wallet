@@ -167,22 +167,24 @@ export async function updateAppShares(
 }
 
 /**
- * Desconectar: primero se corta el acceso a datos en la base (lo que de verdad
- * importa) y después se revoca el grant en Supabase Auth para invalidar sus
- * refresh tokens. Si lo segundo falla, la app ya no lee nada y el grant queda
- * listado en Configuración para reintentar.
+ * Desconectar: primero se revoca el grant en Supabase Auth (invalida los
+ * refresh tokens de la app) y después se borra la conexión en la base. En ese
+ * orden, nunca queda un grant vivo sin conexión, que haría que Supabase
+ * auto-apruebe la próxima conexión saltándose la pantalla de consentimiento.
  */
 export async function disconnectApp(clientId: string): Promise<ActionResult & { partial?: boolean }> {
   if (typeof clientId !== "string" || !clientId) return { error: "App no válida." };
   const { supabase } = await requireUser();
 
-  const { error } = await supabase.rpc("revoke_integration", { p_client_id: clientId });
-  if (error) return { error: "No se pudo desconectar la app." };
-
   const { error: grantError } = await supabase.auth.oauth.revokeGrant({ clientId });
+  if (grantError) return { error: "No se pudo desconectar la app. Inténtalo de nuevo." };
+
+  const { error } = await supabase.rpc("revoke_integration", { p_client_id: clientId });
   scheduleWebhookDelivery(); // grant.revoked
   revalidatePath("/settings");
-  return grantError ? { partial: true } : {};
+  // El grant ya no existe, así que la app no puede renovar su acceso aunque la
+  // base falle; se reintenta desde Configuración.
+  return error ? { partial: true } : {};
 }
 
 /** Quita un permiso que quedó en Supabase Auth sin conexión en Bernie. */

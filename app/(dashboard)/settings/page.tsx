@@ -22,7 +22,9 @@ export default async function SettingsPage() {
   if (!user) return null;
   const supabase = await createClient();
 
-  const [{ data: systemBanks }, { data: userBanks }, { data: paymentMethods }] =
+  // La demo no puede conectar apps (SPEC §15.5): la sección no se muestra.
+  // Se pide en paralelo con el resto, no después.
+  const [{ data: systemBanks }, { data: userBanks }, { data: paymentMethods }, connected] =
     await Promise.all([
       supabase.from("system_banks").select("id, official_name").eq("active", true).order("official_name"),
       supabase.from("user_banks").select("id, system_bank_id").eq("user_id", user.id),
@@ -30,6 +32,7 @@ export default async function SettingsPage() {
         .from("payment_methods")
         .select("id, user_bank_id, type, identifier, alias")
         .eq("user_id", user.id),
+      isDemoUser(user) ? null : loadConnectedApps(supabase, user.id),
     ]);
 
   const connectedIds = new Set((userBanks ?? []).map((b) => b.system_bank_id));
@@ -47,8 +50,6 @@ export default async function SettingsPage() {
   }));
   const methods = (paymentMethods ?? []) as PaymentMethod[];
 
-  // La demo no puede conectar apps (SPEC §15.5): la sección no se muestra.
-  const connected = isDemoUser(user) ? null : await loadConnectedApps(supabase, user.id);
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-9">

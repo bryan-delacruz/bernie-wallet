@@ -42,6 +42,8 @@ export default async function ConsentPage({
   }
 
   const supabase = await createClient();
+  // Las categorías no dependen de la solicitud: se piden en paralelo con ella.
+  const categoriesQuery = supabase.from("categories").select("id, name").eq("user_id", user.id).order("name");
   const { data: details, error } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
   if (error || !details) {
     return (
@@ -54,18 +56,15 @@ export default async function ConsentPage({
   // Ya había autorizado antes: Supabase devuelve directo la URL de vuelta.
   if (!("authorization_id" in details)) redirect(details.redirect_url);
 
-  const { data: categories } = await supabase
-    .from("categories")
-    .select("id, name")
-    .eq("user_id", user.id)
-    .order("name");
-
   // Si ya estaba conectada (reautorización), se marcan las que ya comparte.
-  const { data: shared } = await supabase
-    .from("integration_shares")
-    .select("category_id")
-    .eq("user_id", user.id)
-    .eq("client_id", details.client.id);
+  const [{ data: categories }, { data: shared }] = await Promise.all([
+    categoriesQuery,
+    supabase
+      .from("integration_shares")
+      .select("category_id")
+      .eq("user_id", user.id)
+      .eq("client_id", details.client.id),
+  ]);
 
   const list = categories ?? [];
   const preselected = shared?.length

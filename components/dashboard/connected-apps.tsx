@@ -122,7 +122,7 @@ function AppCard({ app, categories }: { app: ConnectedApp; categories: Category[
       }
       setConfirming(false);
       if (res.partial) {
-        toast.warning(`${app.name} ya no ve tus gastos. Quedó un permiso por quitar: revísalo abajo.`);
+        toast.warning(`${app.name} ya no puede renovar su acceso, pero no se terminó de desconectar. Vuelve a intentarlo.`);
       } else {
         toast.success(`${app.name} desconectada`);
       }
