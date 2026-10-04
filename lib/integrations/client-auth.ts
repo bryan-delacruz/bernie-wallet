@@ -1,3 +1,4 @@
+import "server-only";
 import { createClient, isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supabase-js";
 import { problem } from "@/lib/integrations/problem";
 

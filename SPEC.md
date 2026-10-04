@@ -753,7 +753,7 @@ pantalla de consentimiento, y la app quedaría sin categorías.
    `http://localhost:3400/api/bernie/callback`. El `client_id` y el secret van a
    Casorio.
 5. **Registrar el cliente en Bernie** (genera el secreto de webhook y lo imprime una vez):
-   `node --env-file=.env.local scripts/register-integration-client.ts <client_id> "Casorio Club" https://casorio-club.vercel.app/api/webhooks/bernie`
+   `node --conditions=react-server --env-file=.env.local scripts/register-integration-client.ts <client_id> "Casorio Club" https://casorio-club.vercel.app/api/webhooks/bernie`
 6. **Vault** (SQL editor), para que `pg_cron` pueda llamar a la entrega de respaldo:
    ```sql
    select vault.create_secret('https://bernie-wallet.vercel.app', 'bernie_site_url');

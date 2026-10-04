@@ -1,3 +1,4 @@
+import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { after } from "next/server";
 import { decrypt } from "@/lib/crypto";

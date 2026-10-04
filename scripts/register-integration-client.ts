@@ -3,7 +3,7 @@
  * Genera el secreto de webhook, lo guarda cifrado y lo imprime UNA vez para
  * configurarlo en la app cliente. Nunca se escribe a mano en SQL.
  *
- *   node --env-file=.env.local scripts/register-integration-client.ts \
+ *   node --conditions=react-server --env-file=.env.local scripts/register-integration-client.ts \
  *     <client_id> "<nombre>" <webhook_url> [--rotate]
  *
  * Requiere NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY e INTEGRATION_SECRET_KEY.
