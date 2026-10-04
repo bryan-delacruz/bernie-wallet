@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { scheduleWebhookDelivery } from "@/lib/integrations/webhook-delivery";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,6 +20,8 @@ function refresh() {
   // Las categorías alimentan también el formulario de gasto en /activity.
   revalidatePath("/categories");
   revalidatePath("/activity");
+  // Renombrar o mover una subcategoría puede cambiar lo que ve una app conectada.
+  scheduleWebhookDelivery();
 }
 
 export async function createCategory(name: string): Promise<ActionResult> {

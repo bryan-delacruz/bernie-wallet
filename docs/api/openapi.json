@@ -1,0 +1,243 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Bernie Wallet — Connected Apps API",
+    "version": "1.0.0",
+    "description": "Read-only API for apps the user connects to Bernie Wallet through OAuth 2.1. An app only sees expenses from the categories the user chose to share. See SPEC.md §15."
+  },
+  "servers": [{ "url": "https://bernie-wallet.vercel.app" }],
+  "security": [{ "oauth2": [] }],
+  "paths": {
+    "/api/v1/shared-expenses/sync": {
+      "get": {
+        "operationId": "syncSharedExpenses",
+        "summary": "Incremental sync of shared expenses",
+        "description": "Call without a cursor for the initial sync. Then call with the last nextCursor. While hasMore is true, call again right away. On 409 cursor_reset, drop the cursor and start over. The same expense may be delivered more than once, so clients must upsert by id. removed may contain ids the client never received; ignore them.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque cursor returned by the previous call.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 200 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of changes.",
+            "headers": {
+              "RateLimit-Limit": { "$ref": "#/components/headers/RateLimit-Limit" },
+              "RateLimit-Remaining": { "$ref": "#/components/headers/RateLimit-Remaining" },
+              "RateLimit-Reset": { "$ref": "#/components/headers/RateLimit-Reset" }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SyncPage" },
+                "examples": {
+                  "initial": {
+                    "summary": "Initial sync",
+                    "value": {
+                      "added": [
+                        {
+                          "id": "3f6c1a52-8a0e-4b1f-9d6a-2b7f0c9e4d11",
+                          "occurredAt": "2026-09-12T15:04:05.000Z",
+                          "amount": "800.00",
+                          "currency": "PEN",
+                          "merchant": "Estudio Foto Lima",
+                          "subcategory": "Fotógrafo"
+                        }
+                      ],
+                      "modified": [],
+                      "removed": [],
+                      "nextCursor": "eyJ2IjoxLCJ0cyI6IjIwMjYtMDktMTJUMTU6MDQ6MDUuMDAwWiIsImlkIjoiM2Y2YzFhNTItOGEwZS00YjFmLTlkNmEtMmI3ZjBjOWU0ZDExIiwic3YiOjEsImZpbmFsIjp0cnVlfQ",
+                      "hasMore": false
+                    }
+                  },
+                  "incremental": {
+                    "summary": "Changes since a cursor",
+                    "value": {
+                      "added": [],
+                      "modified": [
+                        {
+                          "id": "3f6c1a52-8a0e-4b1f-9d6a-2b7f0c9e4d11",
+                          "occurredAt": "2026-09-12T15:04:05.000Z",
+                          "amount": "850.00",
+                          "currency": "PEN",
+                          "merchant": "Estudio Foto Lima",
+                          "subcategory": "Fotógrafo"
+                        }
+                      ],
+                      "removed": ["9b2d7e40-1c3a-4f5e-8a6b-0d1e2f3a4b5c"],
+                      "nextCursor": "eyJ2IjoxLCJ0cyI6IjIwMjYtMDktMjBUMTA6MDA6MDAuMDAwWiIsImlkIjoiOWIyZDdlNDAtMWMzYS00ZjVlLThhNmItMGQxZTJmM2E0YjVjIiwic3YiOjEsImZpbmFsIjp0cnVlfQ",
+                      "hasMore": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "409": { "$ref": "#/components/responses/Problem" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/api/v1/connection/revoke": {
+      "post": {
+        "operationId": "revokeConnection",
+        "summary": "Disconnect the calling app from the user's account",
+        "description": "Removes the connection and the shared categories, and revokes the app's refresh tokens. The access token used for this call stops working for data immediately.",
+        "responses": {
+          "204": { "description": "Disconnected." },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "403": { "$ref": "#/components/responses/Problem" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "500": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "expenses.sync_available": {
+      "post": {
+        "summary": "New changes are available",
+        "description": "Thin notification: it carries no expense data. Call the sync endpoint. Signed with Standard Webhooks (webhook-id, webhook-timestamp, webhook-signature). Delivered at least once; deduplicate by webhook-id. Respond 2xx quickly.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WebhookEvent" },
+              "example": {
+                "type": "expenses.sync_available",
+                "timestamp": "2026-09-20T10:00:00.000Z",
+                "data": { "userId": "5e0c2b1a-7d3f-4a9e-b8c6-1f2e3d4c5b6a" }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Received." } }
+      }
+    },
+    "grant.revoked": {
+      "post": {
+        "summary": "The user disconnected the app from Bernie",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WebhookEvent" },
+              "example": {
+                "type": "grant.revoked",
+                "timestamp": "2026-09-21T10:00:00.000Z",
+                "data": { "userId": "5e0c2b1a-7d3f-4a9e-b8c6-1f2e3d4c5b6a" }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Received." } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "description": "OAuth 2.1 authorization code with PKCE (S256). Confidential clients only.",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://voexbnscadfcvholytyd.supabase.co/auth/v1/oauth/authorize",
+            "tokenUrl": "https://voexbnscadfcvholytyd.supabase.co/auth/v1/oauth/token",
+            "scopes": { "email": "User's email" }
+          }
+        }
+      }
+    },
+    "headers": {
+      "RateLimit-Limit": { "schema": { "type": "integer" }, "description": "Requests allowed per minute." },
+      "RateLimit-Remaining": { "schema": { "type": "integer" } },
+      "RateLimit-Reset": { "schema": { "type": "integer" }, "description": "Seconds until the window resets." },
+      "Retry-After": { "schema": { "type": "integer" }, "description": "Seconds to wait before retrying." }
+    },
+    "responses": {
+      "Problem": {
+        "description": "Error (RFC 9457).",
+        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+      },
+      "RateLimited": {
+        "description": "Too many requests (RFC 9457).",
+        "headers": {
+          "Retry-After": { "$ref": "#/components/headers/Retry-After" },
+          "RateLimit-Limit": { "$ref": "#/components/headers/RateLimit-Limit" },
+          "RateLimit-Remaining": { "$ref": "#/components/headers/RateLimit-Remaining" },
+          "RateLimit-Reset": { "$ref": "#/components/headers/RateLimit-Reset" }
+        },
+        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+      }
+    },
+    "schemas": {
+      "SharedExpense": {
+        "type": "object",
+        "required": ["id", "occurredAt", "amount", "currency", "merchant", "subcategory"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "amount": {
+            "type": "string",
+            "pattern": "^-?\\d+\\.\\d{2}$",
+            "description": "Decimal string with two decimals. Never a float."
+          },
+          "currency": { "type": "string", "pattern": "^[A-Z]{3}$", "description": "ISO 4217 code (today PEN or USD)." },
+          "merchant": { "type": "string" },
+          "subcategory": { "type": ["string", "null"] }
+        }
+      },
+      "SyncPage": {
+        "type": "object",
+        "required": ["added", "modified", "removed", "nextCursor", "hasMore"],
+        "additionalProperties": false,
+        "properties": {
+          "added": { "type": "array", "items": { "$ref": "#/components/schemas/SharedExpense" } },
+          "modified": { "type": "array", "items": { "$ref": "#/components/schemas/SharedExpense" } },
+          "removed": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+          "nextCursor": { "type": "string" },
+          "hasMore": { "type": "boolean" }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": ["type", "title", "status", "code"],
+        "properties": {
+          "type": { "type": "string", "format": "uri" },
+          "title": { "type": "string" },
+          "status": { "type": "integer" },
+          "code": {
+            "type": "string",
+            "enum": ["invalid_request", "unauthorized", "not_connected", "cursor_reset", "rate_limited", "internal"]
+          },
+          "detail": { "type": "string" }
+        }
+      },
+      "WebhookEvent": {
+        "type": "object",
+        "required": ["type", "timestamp", "data"],
+        "properties": {
+          "type": { "type": "string", "enum": ["expenses.sync_available", "grant.revoked"] },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "data": {
+            "type": "object",
+            "required": ["userId"],
+            "properties": { "userId": { "type": "string", "format": "uuid" } }
+          }
+        }
+      }
+    }
+  }
+}

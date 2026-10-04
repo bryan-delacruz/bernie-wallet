@@ -8,6 +8,7 @@ import {
   GmailAuthError,
 } from "@/lib/gmail/gmail-service";
 import { extractExpense, type NotificationType } from "@/lib/parser/parser-service";
+import { scheduleWebhookDelivery } from "@/lib/integrations/webhook-delivery";
 
 // Usa node:crypto (cifrado del token) y Buffer → forzamos runtime Node.
 export const runtime = "nodejs";
@@ -337,6 +338,8 @@ export async function POST() {
     // restantes = recuperables aún sin importar (fuera del tope o por reintentar).
     // Los descartados no cuentan: ya nos rendimos con ellos.
     const restantes = totalNew - resolved - descartados;
+    // Gastos nuevos en categorías compartidas → avisar a las apps conectadas.
+    if (nuevos > 0) scheduleWebhookDelivery();
     return NextResponse.json({
       nuevos,
       procesados: resolved,

@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isValidCategorySelection, replaceShares } from "@/lib/integrations/shares";
+import { scheduleWebhookDelivery } from "@/lib/integrations/webhook-delivery";
 
 export type ActionResult = { error?: string };
 
@@ -133,5 +135,62 @@ export async function disconnectBank(systemBankId: string): Promise<ActionResult
     .eq("system_bank_id", systemBankId);
   if (error) return { error: "No se pudo desconectar el banco." };
   refresh();
+  return {};
+}
+
+// ---------- Apps conectadas (SPEC §15.8) ----------
+
+export async function updateAppShares(
+  clientId: string,
+  categoryIds: string[],
+): Promise<ActionResult> {
+  if (typeof clientId !== "string" || !clientId) return { error: "App no válida." };
+  if (!isValidCategorySelection(categoryIds)) {
+    return { error: "Elige al menos una categoría. Para dejar de compartir, desconecta la app." };
+  }
+  const { supabase, userId } = await requireUser();
+
+  // Solo apps realmente conectadas (RLS: solo las propias).
+  const { data: connection } = await supabase
+    .from("integration_connections")
+    .select("client_id")
+    .eq("user_id", userId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (!connection) return { error: "Esta app ya no está conectada." };
+
+  const res = await replaceShares(supabase, userId, clientId, categoryIds, "shares_changed");
+  if (res.error) return { error: "No se pudieron guardar las categorías." };
+  scheduleWebhookDelivery();
+  revalidatePath("/settings");
+  return {};
+}
+
+/**
+ * Desconectar: primero se corta el acceso a datos en la base (lo que de verdad
+ * importa) y después se revoca el grant en Supabase Auth para invalidar sus
+ * refresh tokens. Si lo segundo falla, la app ya no lee nada y el grant queda
+ * listado en Configuración para reintentar.
+ */
+export async function disconnectApp(clientId: string): Promise<ActionResult & { partial?: boolean }> {
+  if (typeof clientId !== "string" || !clientId) return { error: "App no válida." };
+  const { supabase } = await requireUser();
+
+  const { error } = await supabase.rpc("revoke_integration", { p_client_id: clientId });
+  if (error) return { error: "No se pudo desconectar la app." };
+
+  const { error: grantError } = await supabase.auth.oauth.revokeGrant({ clientId });
+  scheduleWebhookDelivery(); // grant.revoked
+  revalidatePath("/settings");
+  return grantError ? { partial: true } : {};
+}
+
+/** Quita un permiso que quedó en Supabase Auth sin conexión en Bernie. */
+export async function revokeOrphanGrant(clientId: string): Promise<ActionResult> {
+  if (typeof clientId !== "string" || !clientId) return { error: "App no válida." };
+  const { supabase } = await requireUser();
+  const { error } = await supabase.auth.oauth.revokeGrant({ clientId });
+  if (error) return { error: "No se pudo quitar el acceso. Inténtalo de nuevo." };
+  revalidatePath("/settings");
   return {};
 }

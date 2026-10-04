@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Lock, RotateCcw, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/safe-next";
 import { BernieLogo } from "@/components/brand/bernie-logo";
 import { LoginShowcase } from "@/components/auth/login-showcase";
 import { GoogleSignInButton } from "./google-sign-in-button";
@@ -32,18 +33,21 @@ const DEFAULT_ERROR = "Ocurrió un problema al iniciar sesión. Inténtalo de nu
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; reconnect?: string }>;
+  searchParams: Promise<{ error?: string; reconnect?: string; next?: string }>;
 }) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const { error, reconnect, next: rawNext } = await searchParams;
+  // A dónde volver tras entrar (p. ej. la pantalla de consentimiento de una app).
+  const next = safeNext(rawNext);
+
   if (user) {
-    redirect("/dashboard");
+    redirect(next ?? "/dashboard");
   }
 
-  const { error, reconnect } = await searchParams;
   const errorMessage = error ? (ERROR_MESSAGES[error] ?? DEFAULT_ERROR) : null;
   // Reconexión: el login normal no fuerza el consentimiento, así que este es el
   // único camino que reemite el refresh_token cuando se pierde el acceso a Gmail.
@@ -99,7 +103,7 @@ export default async function LoginPage({
               </p>
             )}
 
-            <GoogleSignInButton className="w-full" reconnect={isReconnect} />
+            <GoogleSignInButton className="w-full" reconnect={isReconnect} next={next} />
 
             {/* Desktop: nota breve (las garantías ya viven en el panel) */}
             <p className="hidden items-center justify-center gap-1.5 text-xs text-muted-foreground lg:flex">

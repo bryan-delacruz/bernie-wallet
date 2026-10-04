@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LegalShell } from "@/components/legal/legal-shell";
 
-const UPDATED_AT = "12 de septiembre de 2026";
+const UPDATED_AT = "4 de octubre de 2026";
 // Contacto público que exige Google para la política. Es un Grupo de Google
 // (buzón compartido) para no exponer el correo personal del autor; debe coincidir
 // con el correo de asistencia declarado en la pantalla de consentimiento.
@@ -137,7 +137,7 @@ export default function PrivacyPage() {
           <li>
             <strong>no</strong> los transferimos a terceros, salvo a los proveedores de
             infraestructura mencionados arriba, cuando sea necesario para operar el servicio o
-            cuando la ley lo exija;
+            cuando la ley lo exija, y a las <strong>apps que tú conectes</strong> (ver abajo);
           </li>
           <li>
             <strong>no</strong> los usamos para publicidad, ni para crear perfiles publicitarios, ni
@@ -148,6 +148,30 @@ export default function PrivacyPage() {
             extracción de datos de los correos es un proceso programático, sin IA;
           </li>
           <li>ninguna persona lee tus correos, salvo que tú lo pidas para resolver un problema.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Apps conectadas</h2>
+        <p>
+          Puedes conectar Bernie Wallet con otras apps (por ejemplo, Casorio Club) para que vean
+          algunos de tus gastos. Eso ocurre <strong>solo si tú lo autorizas</strong> en una
+          pantalla de permiso de Bernie, y con estos límites:
+        </p>
+        <ul>
+          <li>
+            la app ve <strong>solo las categorías que elijas</strong>, y de cada gasto solo la
+            fecha, el monto, la moneda, el comercio y la subcategoría;
+          </li>
+          <li>
+            <strong>nunca</strong> ve tus correos, tus tarjetas, tus cuentas ni tus bancos;
+          </li>
+          <li>el acceso es de solo lectura: la app no puede crear, cambiar ni borrar nada;</li>
+          <li>
+            en <strong>Configuración → Apps conectadas</strong> ves qué compartes y el historial de
+            permisos, cambias las categorías o desconectas la app. Al desconectarla deja de
+            recibir datos al instante.
+          </li>
         </ul>
       </section>
 

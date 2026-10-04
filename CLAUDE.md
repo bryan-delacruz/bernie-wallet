@@ -28,6 +28,7 @@ pnpm build               # build de producción
 pnpm lint                # eslint (flat config)
 pnpm exec tsc --noEmit   # typecheck — lo corre CI; no existe script `typecheck`
 pnpm test                # tests del parser con node:test (no hay framework de tests)
+pnpm test:db             # migraciones + RLS + apps conectadas sobre PGlite (Postgres en memoria)
 pnpm db:new <nombre>     # nuevo archivo de migración de Supabase
 pnpm db:status           # migraciones locales vs. aplicadas en el proyecto enlazado
 pnpm db:push             # aplica las migraciones pendientes al proyecto enlazado
@@ -35,7 +36,7 @@ pnpm db:push             # aplica las migraciones pendientes al proyecto enlazad
 
 Un solo test: `pnpm exec node --test --test-name-pattern "<regex>" lib/parser/parser-service.test.ts`
 
-CI (`.github/workflows/ci.yml`) corre lint → tsc → test en cada PR y push a `main`.
+CI (`.github/workflows/ci.yml`) corre lint → tsc → test → test:db en cada PR y push a `main`.
 
 **Aviso sobre la base de datos:** durante el MVP hay un único proyecto Supabase
 compartido entre local y producción (§11.1). Esa base *es* producción — nunca correr

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { scheduleWebhookDelivery } from "@/lib/integrations/webhook-delivery";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -20,6 +21,8 @@ function refresh(taxonomyChanged = false) {
   revalidatePath("/dashboard");
   // Una categoría/subcategoría creada al paso también cambia /categories.
   if (taxonomyChanged) revalidatePath("/categories");
+  // Si el gasto es de una categoría compartida, un trigger ya encoló el aviso.
+  scheduleWebhookDelivery();
 }
 
 const MAX_NAME_LENGTH = 40;
