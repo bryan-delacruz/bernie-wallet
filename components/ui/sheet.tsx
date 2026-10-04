@@ -26,7 +26,7 @@ function SheetContent({ className, children, ...props }: SheetPrimitive.Popup.Pr
       <SheetPrimitive.Popup
         data-slot="sheet-content"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col rounded-t-2xl bg-popover text-popover-foreground ring-1 ring-foreground/10 outline-none duration-300 data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom",
+          "fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-2xl pb-[env(safe-area-inset-bottom)] bg-popover text-popover-foreground ring-1 ring-foreground/10 outline-none duration-300 data-open:animate-in data-open:slide-in-from-bottom data-closed:animate-out data-closed:slide-out-to-bottom",
           className,
         )}
         {...props}
