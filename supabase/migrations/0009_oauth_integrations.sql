@@ -472,11 +472,15 @@ begin
     update public.integration_events e
     set next_attempt_at = now() + interval '2 minutes'
     where e.id in (
+      -- Solo de apps activas con webhook: los de una app desactivada esperan
+      -- quietos en vez de reclamarse en bucle cada 2 minutos.
       select p.id from public.integration_events p
+      join public.integration_clients pc on pc.client_id = p.client_id
       where p.delivered_at is null and p.dead_at is null and p.next_attempt_at <= now()
+        and pc.active and pc.webhook_url is not null
       order by p.next_attempt_at
       limit p_limit
-      for update skip locked
+      for update of p skip locked
     )
     returning e.id, e.client_id, e.type, e.payload, e.attempts, e.created_at
   )

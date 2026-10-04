@@ -69,8 +69,12 @@ export function buildSyncPage(
   }
 
   const last = page.at(-1);
+  // El ts del cursor va tal cual lo entrega Postgres (con microsegundos). Pasarlo
+  // por Date lo truncaría a milisegundos: con más de `limit` filas en el mismo
+  // instante (p. ej. mover una subcategoría toca todos sus gastos en una sola
+  // sentencia), la página siguiente repetiría las mismas filas para siempre.
   const cursor: SyncCursor = last
-    ? { ts: toIso(last.changed_at), id: last.id, sv: opts.sharesVersion, final: !hasMore }
+    ? { ts: last.changed_at, id: last.id, sv: opts.sharesVersion, final: !hasMore }
     : opts.previous
       ? { ...opts.previous, sv: opts.sharesVersion, final: true }
       : // Sync inicial vacía: se empieza desde ahora; la ventana de relectura cubre

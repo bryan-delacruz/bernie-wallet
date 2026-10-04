@@ -72,7 +72,7 @@ test("sync inicial: todo added; cursor de cierre en la última fila", () => {
   const page = buildSyncPage([row(1), row(2)], { limit: 10, previous: null, sharesVersion: 3, now });
   assert.equal(page.added.length, 2);
   assert.equal(page.hasMore, false);
-  assert.deepEqual(decodeCursor(page.nextCursor), { ts: "2026-09-22T10:00:00.000Z", id: ID(2), sv: 3, final: true });
+  assert.deepEqual(decodeCursor(page.nextCursor), { ts: "2026-09-22T10:00:00+00:00", id: ID(2), sv: 3, final: true });
 });
 
 test("incremental: added si se creó después del cursor, modified si no, removed sin datos", () => {
@@ -87,6 +87,12 @@ test("incremental: added si se creó después del cursor, modified si no, remove
   assert.deepEqual(page.modified.map((e) => e.id), [ID(1)]);
   assert.deepEqual(page.added.map((e) => e.id), [ID(2)]);
   assert.deepEqual(page.removed, [ID(3)]);
+});
+
+test("cursor: conserva los microsegundos de Postgres (sin pasar por Date)", () => {
+  const ts = "2026-09-20T10:00:00.123456+00:00";
+  const page = buildSyncPage([row(1, { changed_at: ts }), row(2, { changed_at: ts })], { limit: 1, previous: null, sharesVersion: 1, now });
+  assert.equal(decodeCursor(page.nextCursor)?.ts, ts);
 });
 
 test("paginación: limit + 1 filas → hasMore y cursor intermedio (sin ventana)", () => {
