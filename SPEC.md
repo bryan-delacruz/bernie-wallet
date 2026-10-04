@@ -661,8 +661,8 @@ usuario y cliente, deduplicado mientras haya uno pendiente).
    solo si es una ruta interna (empieza con `/`, no con `//` ni `/\`): sin open
    redirects. Usuario anónimo (demo) → "Necesitas una cuenta real para conectar apps".
 4. Pantalla de consentimiento: nombre de la app (de `getAuthorizationDetails`),
-   **qué compartirá** (campos de 15.2), **selector de categorías** (preselecciona
-   "Matrimonio" si existe; al menos una obligatoria), aviso "lo verán todos los
+   **qué compartirá** (campos de 15.2), **selector de categorías** (preselecciona la de
+   boda: "Matrimonio", "matri", "Boda", "Wedding"…; al menos una obligatoria), aviso "lo verán todos los
    miembros de tu boda en Casorio", **Permitir / Cancelar**.
 5. Permitir → Server Action: guarda `integration_shares` + `integration_audit`
    (`granted`) → `approveAuthorization()` → redirige con el código.

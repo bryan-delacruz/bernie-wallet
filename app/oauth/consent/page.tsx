@@ -70,7 +70,7 @@ export default async function ConsentPage({
   const list = categories ?? [];
   const preselected = shared?.length
     ? shared.map((s) => s.category_id)
-    : list.filter((c) => c.name.trim().toLowerCase() === "matrimonio").map((c) => c.id);
+    : list.filter((c) => looksLikeWedding(c.name)).map((c) => c.id);
 
   return (
     <ConsentShell>
@@ -84,6 +84,16 @@ export default async function ConsentPage({
       />
     </ConsentShell>
   );
+}
+
+/**
+ * La categoría de boda se preselecciona aunque el usuario la haya llamado
+ * "matri", "Boda" o "Wedding": la primera conexión real tenía "matri" y no se
+ * marcó. Es solo una sugerencia; el usuario igual elige.
+ */
+function looksLikeWedding(name: string) {
+  const n = name.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+  return n === "matri" || n.startsWith("matrimon") || n.includes("boda") || n.includes("wedding") || n.includes("casamiento");
 }
 
 function hostOf(url: string) {
