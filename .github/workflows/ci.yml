@@ -32,3 +32,8 @@ jobs:
 
       - name: Tests
         run: pnpm test
+
+      # Migraciones + RLS + funciones de apps conectadas sobre Postgres en
+      # memoria (PGlite), con un stub de auth/cron/vault de Supabase.
+      - name: Tests de base de datos
+        run: pnpm test:db
