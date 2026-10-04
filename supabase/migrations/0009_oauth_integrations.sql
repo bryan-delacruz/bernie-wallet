@@ -448,6 +448,83 @@ begin
   end if;
 end $$;
 
+-- ============================================================
+-- Entrega de webhooks (solo service_role)
+-- ============================================================
+
+-- Reclama eventos pendientes con un "lease" de 2 minutos: si la entrega se cae a
+-- mitad de camino, vuelven a estar disponibles solos. skip locked evita que dos
+-- entregas simultáneas (after() y pg_cron) manden el mismo evento.
+create function claim_integration_events(p_limit int default 50)
+returns table (
+  id          uuid,
+  type        text,
+  payload     jsonb,
+  attempts    int,
+  created_at  timestamptz,
+  webhook_url text,
+  webhook_secret text
+)
+language plpgsql security definer set search_path = '' as $$
+begin
+  return query
+  with claimed as (
+    update public.integration_events e
+    set next_attempt_at = now() + interval '2 minutes'
+    where e.id in (
+      select p.id from public.integration_events p
+      where p.delivered_at is null and p.dead_at is null and p.next_attempt_at <= now()
+      order by p.next_attempt_at
+      limit p_limit
+      for update skip locked
+    )
+    returning e.id, e.client_id, e.type, e.payload, e.attempts, e.created_at
+  )
+  select c.id, c.type, c.payload, c.attempts, c.created_at, ic.webhook_url, ic.webhook_secret
+  from claimed c
+  join public.integration_clients ic on ic.client_id = c.client_id
+  where ic.active and ic.webhook_url is not null;
+end $$;
+
+-- Cierra un intento. Backoff: 1 min, 5 min, 15 min, 1 h, 3 h, 6 h, 12 h, 24 h;
+-- tras el octavo fallo el evento queda muerto (dead_at) y el cliente lo cubre
+-- con su sync de respaldo.
+create function complete_integration_event(p_id uuid, p_ok boolean, p_error text default null)
+returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_attempts int;
+  v_backoff  interval[] := array[
+    interval '1 minute', interval '5 minutes', interval '15 minutes', interval '1 hour',
+    interval '3 hours', interval '6 hours', interval '12 hours', interval '24 hours'
+  ];
+begin
+  if p_ok then
+    update public.integration_events
+    set delivered_at = now(), attempts = attempts + 1, last_error = null
+    where id = p_id;
+    return;
+  end if;
+
+  update public.integration_events
+  set attempts = attempts + 1, last_error = left(p_error, 500)
+  where id = p_id
+  returning attempts into v_attempts;
+
+  if v_attempts >= array_length(v_backoff, 1) then
+    update public.integration_events set dead_at = now() where id = p_id;
+  else
+    update public.integration_events
+    set next_attempt_at = now() + v_backoff[v_attempts]
+    where id = p_id;
+  end if;
+end $$;
+
+revoke execute on function claim_integration_events(int), complete_integration_event(uuid, boolean, text)
+from public, anon, authenticated;
+grant execute on function claim_integration_events(int), complete_integration_event(uuid, boolean, text)
+to service_role;
+
 -- Funciones expuestas: solo usuarios autenticados. Las internas, a nadie.
 revoke execute on function
   integration_require_client(), integration_shares_version(),
@@ -481,6 +558,33 @@ select cron.schedule(
     delete from public.integration_events e
       where not exists (select 1 from public.users u where u.id = e.user_id);
     delete from public.api_rate_limits where window_start < now() - interval '1 hour';
+  $$
+);
+
+
+-- Entrega de respaldo cada minuto: llama a la ruta de Bernie solo si hay algo
+-- pendiente. La URL y el secreto viven en Vault (SPEC §15.9), nunca en el SQL.
+create extension if not exists pg_net with schema extensions;
+
+select cron.schedule(
+  'bernie-deliver-webhooks',
+  '* * * * *',
+  $$
+    select net.http_post(
+      url := (select decrypted_secret from vault.decrypted_secrets where name = 'bernie_site_url')
+             || '/api/internal/webhooks/deliver',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'internal_cron_secret')
+      ),
+      body := '{}'::jsonb
+    )
+    where exists (
+      select 1 from public.integration_events
+      where delivered_at is null and dead_at is null and next_attempt_at <= now()
+    )
+    and exists (select 1 from vault.decrypted_secrets where name = 'bernie_site_url')
+    and exists (select 1 from vault.decrypted_secrets where name = 'internal_cron_secret');
   $$
 );
 

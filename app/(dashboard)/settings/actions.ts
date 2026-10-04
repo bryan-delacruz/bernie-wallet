@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isValidCategorySelection, replaceShares } from "@/lib/integrations/shares";
+import { scheduleWebhookDelivery } from "@/lib/integrations/webhook-delivery";
 
 export type ActionResult = { error?: string };
 
@@ -160,6 +161,7 @@ export async function updateAppShares(
 
   const res = await replaceShares(supabase, userId, clientId, categoryIds, "shares_changed");
   if (res.error) return { error: "No se pudieron guardar las categorías." };
+  scheduleWebhookDelivery();
   revalidatePath("/settings");
   return {};
 }
@@ -178,6 +180,7 @@ export async function disconnectApp(clientId: string): Promise<ActionResult & { 
   if (error) return { error: "No se pudo desconectar la app." };
 
   const { error: grantError } = await supabase.auth.oauth.revokeGrant({ clientId });
+  scheduleWebhookDelivery(); // grant.revoked
   revalidatePath("/settings");
   return grantError ? { partial: true } : {};
 }

@@ -356,6 +356,7 @@ y automáticamente en CI (`.github/workflows/ci.yml`) en cada PR y push a `main`
 | `GOOGLE_CLIENT_ID` | servidor | Refrescar el access token de Gmail |
 | `GOOGLE_CLIENT_SECRET` | servidor | Refrescar el access token de Gmail |
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | servidor | Clave AES-256-GCM (32 bytes base64) para cifrar el refresh token |
+| `SUPABASE_SECRET_KEY` | servidor | Secret key (`sb_secret_...`) solo para la entrega de webhooks y el script de registro de apps — §15. Nunca en el cliente |
 | `INTEGRATION_SECRET_KEY` | servidor | AES-256-GCM para cifrar los secretos de webhook de las apps conectadas — §15 |
 | `INTERNAL_CRON_SECRET` | servidor | Protege `/api/internal/webhooks/deliver` (lo llama pg_cron) — §15 |
 
@@ -736,19 +737,24 @@ pantalla de consentimiento, y la app quedaría sin categorías.
 
 ### 15.9 Configuración manual (la hace el usuario)
 
-1. Supabase → Authentication → OAuth Server: activar, authorization path
-   `/oauth/consent`. Verificar Site URL = dominio de producción.
-2. OAuth Apps → cliente **Casorio Club**, confidencial, redirect URIs exactas:
+1. **Variables de Bernie** (Vercel + `.env.local`): `SUPABASE_SECRET_KEY`,
+   `INTEGRATION_SECRET_KEY` (`openssl rand -base64 32`) e `INTERNAL_CRON_SECRET`
+   (`openssl rand -base64 32`).
+2. **Migración 0009** a la base (es producción, §11.1): `pnpm db:push`.
+3. **Supabase → Authentication → OAuth Server:** activar; authorization path
+   `/oauth/consent`. Verificar Site URL = dominio de producción de Bernie.
+4. **OAuth Apps → nuevo cliente "Casorio Club"**, confidencial, redirect URIs exactas:
    `https://casorio-club.vercel.app/api/bernie/callback` y
-   `http://localhost:3000/api/bernie/callback`. Secret → Vercel de Casorio.
-3. Fila en `integration_clients` con el `client_id`, la URL de webhook de Casorio y
-   su secreto (se genera con un script, nunca a mano en SQL).
-4. Migración a llaves JWT asimétricas (15.3.4).
-5. Variables de Bernie: `INTEGRATION_SECRET_KEY` (cifrado de secretos de webhook) e
-   `INTERNAL_CRON_SECRET`.
-
-> ⚠️ Base compartida (§11.1): la migración 0009 y la migración de llaves se aplican
-> a producción solo con aprobación explícita.
+   `http://localhost:3400/api/bernie/callback`. El `client_id` y el secret van a
+   Casorio.
+5. **Registrar el cliente en Bernie** (genera el secreto de webhook y lo imprime una vez):
+   `node --env-file=.env.local scripts/register-integration-client.ts <client_id> "Casorio Club" https://casorio-club.vercel.app/api/webhooks/bernie`
+6. **Vault** (SQL editor), para que `pg_cron` pueda llamar a la entrega de respaldo:
+   ```sql
+   select vault.create_secret('https://bernie-wallet.vercel.app', 'bernie_site_url');
+   select vault.create_secret('<INTERNAL_CRON_SECRET>', 'internal_cron_secret');
+   ```
+7. *(Opcional, recomendado)* migrar a llaves JWT asimétricas (15.3.4).
 
 ### 15.10 Páginas legales
 

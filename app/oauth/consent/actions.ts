@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isDemoUser } from "@/lib/demo";
 import { isValidCategorySelection, replaceShares } from "@/lib/integrations/shares";
+import { scheduleWebhookDelivery } from "@/lib/integrations/webhook-delivery";
 
 export type ConsentResult = { error?: string };
 
@@ -78,6 +79,7 @@ export async function approveConsent(
     existing ? "shares_changed" : "granted",
   );
   if (shares.error) return { error: GENERIC_ERROR };
+  scheduleWebhookDelivery();
 
   const { data: approved, error: approveError } = await supabase.auth.oauth.approveAuthorization(
     authorizationId,
