@@ -71,13 +71,7 @@ export async function approveConsent(
     }
   }
 
-  const shares = await replaceShares(
-    supabase,
-    user.id,
-    client.id,
-    categoryIds,
-    existing ? "shares_changed" : "granted",
-  );
+  const shares = await replaceShares(supabase, user.id, client.id, categoryIds, null);
   if (shares.error) return { error: GENERIC_ERROR };
   scheduleWebhookDelivery();
 
@@ -85,7 +79,21 @@ export async function approveConsent(
     authorizationId,
     { skipBrowserRedirect: true },
   );
-  if (approveError || !approved) return { error: GENERIC_ERROR };
+  if (approveError || !approved) {
+    // Sin aprobación no hay grant: una conexión nueva no debe quedar listada en
+    // Configuración como si existiera (las shares caen en cascada).
+    if (!existing) {
+      await supabase.from("integration_connections").delete().eq("user_id", user.id).eq("client_id", client.id);
+    }
+    return { error: "La solicitud expiró. Vuelve a conectar desde la app." };
+  }
+
+  await supabase.from("integration_audit").insert({
+    user_id: user.id,
+    client_id: client.id,
+    action: existing ? "shares_changed" : "granted",
+    detail: { categories: shares.categoryNames ?? [] },
+  });
 
   redirect(approved.redirect_url);
 }

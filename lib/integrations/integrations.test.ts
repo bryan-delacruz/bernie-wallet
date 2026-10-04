@@ -176,6 +176,12 @@ test("contrato: el validador sí detecta violaciones", () => {
   assert.ok(errors.some((e) => e.includes("occurredAt")));
 });
 
+test("problem: unavailable es 503 y está en el contrato", async () => {
+  const res = problem("unavailable");
+  assert.equal(res.status, 503);
+  assert.deepEqual(validate(await res.json(), spec.components.schemas.Problem), []);
+});
+
 test("contrato: un Problem cumple su esquema", async () => {
   const body = await problem("cursor_reset").json();
   assert.deepEqual(validate(body, spec.components.schemas.Problem), []);

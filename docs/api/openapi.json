@@ -5,8 +5,16 @@
     "version": "1.0.0",
     "description": "Read-only API for apps the user connects to Bernie Wallet through OAuth 2.1. An app only sees expenses from the categories the user chose to share. See SPEC.md §15."
   },
-  "servers": [{ "url": "https://bernie-wallet.vercel.app" }],
-  "security": [{ "oauth2": [] }],
+  "servers": [
+    {
+      "url": "https://bernie-wallet.vercel.app"
+    }
+  ],
+  "security": [
+    {
+      "oauth2": []
+    }
+  ],
   "paths": {
     "/api/v1/shared-expenses/sync": {
       "get": {
@@ -19,26 +27,41 @@
             "in": "query",
             "required": false,
             "description": "Opaque cursor returned by the previous call.",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "limit",
             "in": "query",
             "required": false,
-            "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 200 }
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 200
+            }
           }
         ],
         "responses": {
           "200": {
             "description": "A page of changes.",
             "headers": {
-              "RateLimit-Limit": { "$ref": "#/components/headers/RateLimit-Limit" },
-              "RateLimit-Remaining": { "$ref": "#/components/headers/RateLimit-Remaining" },
-              "RateLimit-Reset": { "$ref": "#/components/headers/RateLimit-Reset" }
+              "RateLimit-Limit": {
+                "$ref": "#/components/headers/RateLimit-Limit"
+              },
+              "RateLimit-Remaining": {
+                "$ref": "#/components/headers/RateLimit-Remaining"
+              },
+              "RateLimit-Reset": {
+                "$ref": "#/components/headers/RateLimit-Reset"
+              }
             },
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/SyncPage" },
+                "schema": {
+                  "$ref": "#/components/schemas/SyncPage"
+                },
                 "examples": {
                   "initial": {
                     "summary": "Initial sync",
@@ -73,7 +96,9 @@
                           "subcategory": "Fotógrafo"
                         }
                       ],
-                      "removed": ["9b2d7e40-1c3a-4f5e-8a6b-0d1e2f3a4b5c"],
+                      "removed": [
+                        "9b2d7e40-1c3a-4f5e-8a6b-0d1e2f3a4b5c"
+                      ],
                       "nextCursor": "eyJ2IjoxLCJ0cyI6IjIwMjYtMDktMjBUMTA6MDA6MDAuMDAwWiIsImlkIjoiOWIyZDdlNDAtMWMzYS00ZjVlLThhNmItMGQxZTJmM2E0YjVjIiwic3YiOjEsImZpbmFsIjp0cnVlfQ",
                       "hasMore": false
                     }
@@ -82,12 +107,27 @@
               }
             }
           },
-          "400": { "$ref": "#/components/responses/Problem" },
-          "401": { "$ref": "#/components/responses/Problem" },
-          "403": { "$ref": "#/components/responses/Problem" },
-          "409": { "$ref": "#/components/responses/Problem" },
-          "429": { "$ref": "#/components/responses/RateLimited" },
-          "500": { "$ref": "#/components/responses/Problem" }
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       }
     },
@@ -95,13 +135,26 @@
       "post": {
         "operationId": "revokeConnection",
         "summary": "Disconnect the calling app from the user's account",
-        "description": "Removes the connection and the shared categories, and revokes the app's refresh tokens. The access token used for this call stops working for data immediately.",
+        "description": "Revokes the app's grant (refresh tokens) first, then removes the connection and the shared categories. If the grant cannot be revoked, responds 503 and changes nothing.",
         "responses": {
-          "204": { "description": "Disconnected." },
-          "401": { "$ref": "#/components/responses/Problem" },
-          "403": { "$ref": "#/components/responses/Problem" },
-          "429": { "$ref": "#/components/responses/RateLimited" },
-          "500": { "$ref": "#/components/responses/Problem" }
+          "204": {
+            "description": "Disconnected."
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
         }
       }
     }
@@ -114,16 +167,24 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/WebhookEvent" },
+              "schema": {
+                "$ref": "#/components/schemas/WebhookEvent"
+              },
               "example": {
                 "type": "expenses.sync_available",
                 "timestamp": "2026-09-20T10:00:00.000Z",
-                "data": { "userId": "5e0c2b1a-7d3f-4a9e-b8c6-1f2e3d4c5b6a" }
+                "data": {
+                  "userId": "5e0c2b1a-7d3f-4a9e-b8c6-1f2e3d4c5b6a"
+                }
               }
             }
           }
         },
-        "responses": { "200": { "description": "Received." } }
+        "responses": {
+          "200": {
+            "description": "Received."
+          }
+        }
       }
     },
     "grant.revoked": {
@@ -132,16 +193,24 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/WebhookEvent" },
+              "schema": {
+                "$ref": "#/components/schemas/WebhookEvent"
+              },
               "example": {
                 "type": "grant.revoked",
                 "timestamp": "2026-09-21T10:00:00.000Z",
-                "data": { "userId": "5e0c2b1a-7d3f-4a9e-b8c6-1f2e3d4c5b6a" }
+                "data": {
+                  "userId": "5e0c2b1a-7d3f-4a9e-b8c6-1f2e3d4c5b6a"
+                }
               }
             }
           }
         },
-        "responses": { "200": { "description": "Received." } }
+        "responses": {
+          "200": {
+            "description": "Received."
+          }
+        }
       }
     }
   },
@@ -154,87 +223,220 @@
           "authorizationCode": {
             "authorizationUrl": "https://voexbnscadfcvholytyd.supabase.co/auth/v1/oauth/authorize",
             "tokenUrl": "https://voexbnscadfcvholytyd.supabase.co/auth/v1/oauth/token",
-            "scopes": { "email": "User's email" }
+            "scopes": {
+              "email": "User's email"
+            }
           }
         }
       }
     },
     "headers": {
-      "RateLimit-Limit": { "schema": { "type": "integer" }, "description": "Requests allowed per minute." },
-      "RateLimit-Remaining": { "schema": { "type": "integer" } },
-      "RateLimit-Reset": { "schema": { "type": "integer" }, "description": "Seconds until the window resets." },
-      "Retry-After": { "schema": { "type": "integer" }, "description": "Seconds to wait before retrying." }
+      "RateLimit-Limit": {
+        "schema": {
+          "type": "integer"
+        },
+        "description": "Requests allowed per minute."
+      },
+      "RateLimit-Remaining": {
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RateLimit-Reset": {
+        "schema": {
+          "type": "integer"
+        },
+        "description": "Seconds until the window resets."
+      },
+      "Retry-After": {
+        "schema": {
+          "type": "integer"
+        },
+        "description": "Seconds to wait before retrying."
+      }
     },
     "responses": {
       "Problem": {
         "description": "Error (RFC 9457).",
-        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
       },
       "RateLimited": {
         "description": "Too many requests (RFC 9457).",
         "headers": {
-          "Retry-After": { "$ref": "#/components/headers/Retry-After" },
-          "RateLimit-Limit": { "$ref": "#/components/headers/RateLimit-Limit" },
-          "RateLimit-Remaining": { "$ref": "#/components/headers/RateLimit-Remaining" },
-          "RateLimit-Reset": { "$ref": "#/components/headers/RateLimit-Reset" }
+          "Retry-After": {
+            "$ref": "#/components/headers/Retry-After"
+          },
+          "RateLimit-Limit": {
+            "$ref": "#/components/headers/RateLimit-Limit"
+          },
+          "RateLimit-Remaining": {
+            "$ref": "#/components/headers/RateLimit-Remaining"
+          },
+          "RateLimit-Reset": {
+            "$ref": "#/components/headers/RateLimit-Reset"
+          }
         },
-        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } }
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
       }
     },
     "schemas": {
       "SharedExpense": {
         "type": "object",
-        "required": ["id", "occurredAt", "amount", "currency", "merchant", "subcategory"],
+        "required": [
+          "id",
+          "occurredAt",
+          "amount",
+          "currency",
+          "merchant",
+          "subcategory"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "occurredAt": { "type": "string", "format": "date-time" },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "amount": {
             "type": "string",
             "pattern": "^-?\\d+\\.\\d{2}$",
             "description": "Decimal string with two decimals. Never a float."
           },
-          "currency": { "type": "string", "pattern": "^[A-Z]{3}$", "description": "ISO 4217 code (today PEN or USD)." },
-          "merchant": { "type": "string" },
-          "subcategory": { "type": ["string", "null"] }
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "description": "ISO 4217 code (today PEN or USD)."
+          },
+          "merchant": {
+            "type": "string"
+          },
+          "subcategory": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       },
       "SyncPage": {
         "type": "object",
-        "required": ["added", "modified", "removed", "nextCursor", "hasMore"],
+        "required": [
+          "added",
+          "modified",
+          "removed",
+          "nextCursor",
+          "hasMore"
+        ],
         "additionalProperties": false,
         "properties": {
-          "added": { "type": "array", "items": { "$ref": "#/components/schemas/SharedExpense" } },
-          "modified": { "type": "array", "items": { "$ref": "#/components/schemas/SharedExpense" } },
-          "removed": { "type": "array", "items": { "type": "string", "format": "uuid" } },
-          "nextCursor": { "type": "string" },
-          "hasMore": { "type": "boolean" }
+          "added": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharedExpense"
+            }
+          },
+          "modified": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharedExpense"
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "nextCursor": {
+            "type": "string"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
         }
       },
       "Problem": {
         "type": "object",
-        "required": ["type", "title", "status", "code"],
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
         "properties": {
-          "type": { "type": "string", "format": "uri" },
-          "title": { "type": "string" },
-          "status": { "type": "integer" },
+          "type": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
           "code": {
             "type": "string",
-            "enum": ["invalid_request", "unauthorized", "not_connected", "cursor_reset", "rate_limited", "internal"]
+            "enum": [
+              "invalid_request",
+              "unauthorized",
+              "not_connected",
+              "cursor_reset",
+              "rate_limited",
+              "unavailable",
+              "internal"
+            ]
           },
-          "detail": { "type": "string" }
+          "detail": {
+            "type": "string"
+          }
         }
       },
       "WebhookEvent": {
         "type": "object",
-        "required": ["type", "timestamp", "data"],
+        "required": [
+          "type",
+          "timestamp",
+          "data"
+        ],
         "properties": {
-          "type": { "type": "string", "enum": ["expenses.sync_available", "grant.revoked"] },
-          "timestamp": { "type": "string", "format": "date-time" },
+          "type": {
+            "type": "string",
+            "enum": [
+              "expenses.sync_available",
+              "grant.revoked"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
           "data": {
             "type": "object",
-            "required": ["userId"],
-            "properties": { "userId": { "type": "string", "format": "uuid" } }
+            "required": [
+              "userId"
+            ],
+            "properties": {
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
           }
         }
       }

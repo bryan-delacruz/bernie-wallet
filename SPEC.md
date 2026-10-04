@@ -698,9 +698,13 @@ montos ni comercios).
 - `hasMore: true` → el cliente vuelve a llamar con `nextCursor`.
 
 **`POST /api/v1/connection/revoke`** — la app se desconecta a sí misma:
-revoca el permiso de ese `client_id` para ese usuario (`revokeGrant`; si el SDK
-no lo permite con un token OAuth, se hace con la Admin API del lado del servidor),
-borra sus `integration_shares` y registra `revoked` en la auditoría. Responde `204`.
+**primero** revoca el grant en Supabase Auth (invalida sus refresh tokens) y
+**después** borra la conexión y registra `revoked`. Si el grant no se puede
+revocar responde `503` sin tocar nada: nunca queda un grant vivo sin conexión,
+que haría que Supabase auto-apruebe la próxima conexión saltándose
+`/oauth/consent`. Responde `204`. Un fallo transitorio de Auth al validar el
+token responde `503` (`unavailable`), no `401`, para que la app no crea que fue
+desconectada.
 Supabase no expone RFC 7009, por eso existe este endpoint.
 
 **`GET /api/v1/openapi.json`** — el contrato (público).
