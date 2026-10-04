@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { encrypt } from "@/lib/crypto";
 import { seedDefaultCategories } from "@/lib/seed";
+import { NEXT_COOKIE, nextFromCookie } from "@/lib/safe-next";
 
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
@@ -9,20 +10,26 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get("code");
   const oauthError = searchParams.get("error");
+  const next = nextFromCookie(request.cookies.get(NEXT_COOKIE)?.value);
+  // Si el login falla, el reintento debe volver al mismo destino.
+  const loginError = (code: string) =>
+    NextResponse.redirect(
+      `${origin}/login?error=${encodeURIComponent(code)}${next ? `&next=${encodeURIComponent(next)}` : ""}`,
+    );
 
   // Google devuelve ?error=access_denied si el usuario cancela el consentimiento.
   if (oauthError) {
-    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(oauthError)}`);
+    return loginError(oauthError);
   }
   if (!code) {
-    return NextResponse.redirect(`${origin}/login?error=missing_code`);
+    return loginError("missing_code");
   }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error || !data.session || !data.user) {
-    return NextResponse.redirect(`${origin}/login?error=auth`);
+    return loginError("auth");
   }
 
   const { user, session } = data;
@@ -61,7 +68,11 @@ export async function GET(request: NextRequest) {
     .select("onboarded_at")
     .eq("id", user.id)
     .single();
-  const destination = profile?.onboarded_at ? "/dashboard" : "/onboarding";
+  // Un `next` válido (p. ej. volver a autorizar una app) manda sobre el destino
+  // por defecto; el onboarding queda para la siguiente visita al dashboard.
+  const destination = next ?? (profile?.onboarded_at ? "/dashboard" : "/onboarding");
 
-  return NextResponse.redirect(`${origin}${destination}`);
+  const response = NextResponse.redirect(`${origin}${destination}`);
+  response.cookies.delete(NEXT_COOKIE);
+  return response;
 }

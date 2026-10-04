@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { NEXT_COOKIE } from "@/lib/safe-next";
 
 const GMAIL_SCOPES =
   "email profile https://www.googleapis.com/auth/gmail.readonly";
@@ -40,12 +41,15 @@ function GoogleGlyph() {
 export function GoogleSignInButton({
   className,
   reconnect = false,
+  next = null,
 }: {
   className?: string;
   /** Reconexión: fuerza el consentimiento para que Google emita un refresh_token
    *  nuevo. En un login normal se omite, porque `prompt=consent` obliga a Google a
    *  mostrar el consentimiento y el aviso de "app no verificada" cada vez. */
   reconnect?: boolean;
+  /** Ruta interna (ya validada) a la que volver tras el callback. */
+  next?: string | null;
 }) {
   // Cliente Supabase instanciado una sola vez (lazy init), no en cada clic:
   // evita crear múltiples GoTrueClient.
@@ -56,6 +60,12 @@ export function GoogleSignInButton({
   async function signIn() {
     setError(null);
     setLoading(true);
+    // El destino viaja en una cookie corta y no en el redirectTo: así la URL de
+    // callback sigue siendo exacta y no hay que ampliar la lista permitida en
+    // Supabase. El callback la vuelve a validar y la borra.
+    document.cookie = next
+      ? `${NEXT_COOKIE}=${encodeURIComponent(next)}; Path=/; Max-Age=600; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`
+      : `${NEXT_COOKIE}=; Path=/; Max-Age=0`;
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",

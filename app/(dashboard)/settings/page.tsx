@@ -8,6 +8,12 @@ import {
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 import { InstallApp } from "@/components/dashboard/install-app";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
+import {
+  ConnectedApps,
+  type ConnectedApp,
+  type OrphanGrant,
+} from "@/components/dashboard/connected-apps";
+import { isDemoUser } from "@/lib/demo";
 
 const SECTION_TITLE = "text-sm font-semibold tracking-wide text-muted-foreground uppercase";
 
@@ -41,6 +47,9 @@ export default async function SettingsPage() {
   }));
   const methods = (paymentMethods ?? []) as PaymentMethod[];
 
+  // La demo no puede conectar apps (SPEC §15.5): la sección no se muestra.
+  const connected = isDemoUser(user) ? null : await loadConnectedApps(supabase, user.id);
+
   return (
     <div className="mx-auto w-full max-w-2xl space-y-9">
       <h1 className="font-heading text-2xl font-medium tracking-tight">Configuración</h1>
@@ -65,6 +74,18 @@ export default async function SettingsPage() {
         <PaymentMethodsSettings banks={connectedBanks} methods={methods} />
       </section>
 
+      {connected ? (
+        <section className="space-y-3">
+          <div>
+            <h2 className={SECTION_TITLE}>Apps conectadas</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Apps a las que diste permiso para ver gastos de algunas categorías. Solo lectura.
+            </p>
+          </div>
+          <ConnectedApps {...connected} />
+        </section>
+      ) : null}
+
       <section className="space-y-3">
         <h2 className={SECTION_TITLE}>Apariencia</h2>
         <ThemeToggle />
@@ -87,4 +108,51 @@ export default async function SettingsPage() {
       </section>
     </div>
   );
+}
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+async function loadConnectedApps(supabase: Supabase, userId: string) {
+  const [{ data: connections }, { data: shares }, { data: categories }, { data: audit }, grants] =
+    await Promise.all([
+      supabase
+        .from("integration_connections")
+        .select("client_id, client_name, created_at")
+        .eq("user_id", userId)
+        .order("created_at"),
+      supabase.from("integration_shares").select("client_id, category_id").eq("user_id", userId),
+      supabase.from("categories").select("id, name").eq("user_id", userId).order("name"),
+      supabase
+        .from("integration_audit")
+        .select("id, client_id, action, detail, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(50),
+      // API beta de Supabase: si falla (p. ej. OAuth Server apagado), solo se
+      // pierde el listado de permisos huérfanos, no la sección.
+      supabase.auth.oauth.listGrants().catch(() => ({ data: null })),
+    ]);
+
+  const apps: ConnectedApp[] = (connections ?? []).map((c) => ({
+    clientId: c.client_id,
+    name: c.client_name,
+    connectedAt: c.created_at,
+    sharedIds: (shares ?? []).filter((s) => s.client_id === c.client_id).map((s) => s.category_id),
+    history: (audit ?? [])
+      .filter((a) => a.client_id === c.client_id)
+      .slice(0, 10)
+      .map((a) => ({
+        id: a.id,
+        action: a.action,
+        at: a.created_at,
+        categories: Array.isArray(a.detail?.categories) ? a.detail.categories : [],
+      })),
+  }));
+
+  const connectedIds = new Set(apps.map((a) => a.clientId));
+  const orphanGrants: OrphanGrant[] = (grants.data ?? [])
+    .filter((g) => !connectedIds.has(g.client.id))
+    .map((g) => ({ clientId: g.client.id, name: g.client.name }));
+
+  return { apps, categories: categories ?? [], orphanGrants };
 }

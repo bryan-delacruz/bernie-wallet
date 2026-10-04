@@ -66,6 +66,9 @@ alter table api_rate_limits     enable row level security;
 create table integration_connections (
   user_id        uuid not null references users (id) on delete cascade,
   client_id      text not null references integration_clients (client_id) on delete cascade,
+  -- Nombre que mostró la pantalla de consentimiento: Configuración lo lista sin
+  -- depender de la API (beta) de grants de Supabase.
+  client_name    text not null,
   shares_version int not null default 1,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),

@@ -621,7 +621,9 @@ token leería **todo**, incluido `google_tokens`. Por eso:
 - `api_rate_limits` — `(client_id, user_id, window_start)` PK, `count`.
 
 **Tablas personales** (RLS de dueño + restrictiva OAuth):
-- `integration_connections` — `(user_id, client_id)` PK, `shares_version` int
+- `integration_connections` — `(user_id, client_id)` PK, `client_name` (el que mostró
+  la pantalla de consentimiento; Configuración no depende de la API beta de grants),
+  `shares_version` int
   (sube con cada cambio de categorías compartidas; un cursor con otra versión →
   `cursor_reset`), `created_at`, `updated_at`. Borrarla = desconectar (cascada a shares).
 - `integration_shares` — `(user_id, client_id, category_id)` PK, `created_at`,
@@ -721,9 +723,16 @@ Supabase no expone RFC 7009, por eso existe este endpoint.
 
 ### 15.8 Configuración → "Apps conectadas"
 
-Por cada app (`getUserGrants()`): fecha de conexión, categorías compartidas
-(editables → evento `shares_changed`), historial de `integration_audit`, y
-**Desconectar** → `revokeGrant()` + borra shares + webhook `grant.revoked`.
+Por cada conexión (`integration_connections`): fecha, categorías compartidas
+(editables, al menos una → `shares_changed`), historial de `integration_audit` y
+**Desconectar**. Oculta para usuarios demo.
+
+**Desconectar** primero corta el acceso a datos (`revoke_integration`) y después
+revoca el grant en Supabase Auth (`revokeGrant`). Si lo segundo falla, la app ya no
+lee nada; el grant queda listado como **permiso huérfano** (de `listGrants()` sin
+conexión) con un botón **Quitar permiso** para reintentar. Sin esto, un grant
+huérfano haría que Supabase auto-apruebe la próxima conexión sin pasar por la
+pantalla de consentimiento, y la app quedaría sin categorías.
 
 ### 15.9 Configuración manual (la hace el usuario)
 
