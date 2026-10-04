@@ -1,6 +1,9 @@
 import { ImageResponse } from "next/og";
 import { AppIcon } from "@/lib/pwa-icon";
 
+// Se genera una vez en el build: el ícono no cambia entre peticiones.
+export const dynamic = "force-static";
+
 // Icono 512 del manifest (purpose "any").
 export function GET() {
   return new ImageResponse(<AppIcon size={512} radius={112} glyphRatio={0.6} />, {
