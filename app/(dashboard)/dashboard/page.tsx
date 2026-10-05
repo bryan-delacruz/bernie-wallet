@@ -8,7 +8,9 @@ import { BalanceCard } from "@/components/dashboard/balance-card";
 import { DashboardFilters } from "@/components/dashboard/dashboard-filters";
 import { StatTiles } from "@/components/dashboard/stat-tiles";
 import { CategoryBars, PaymentSplit, MonthlyTrend } from "@/components/dashboard/lazy-charts";
-import { categoryBlockHeight } from "@/components/dashboard/chart-metrics";
+import { categoryBlockHeight, collapsedRowCount } from "@/components/dashboard/chart-metrics";
+import { StreakCard } from "@/components/dashboard/streak-card";
+import { loadStreakContext } from "@/lib/streak-data";
 import { formatCurrency, formatShortDate, limaMonthRange } from "@/lib/format";
 
 const LIMA_TZ = "America/Lima";
@@ -150,10 +152,13 @@ export default async function DashboardPage({
     return q.order("occurred_at", { ascending: false }).range(from, to);
   };
 
-  const [{ rows: periodRows }, { rows: trendRows }] = await Promise.all([
+  // La racha es un dato del usuario, no del periodo: ignora los filtros a propósito.
+  const [{ rows: periodRows }, { rows: trendRows }, streakContext] = await Promise.all([
     fetchAllRows<ExpenseRow>(periodPage),
     fetchAllRows<TrendRow>(trendPage),
+    loadStreakContext(user.id),
   ]);
+  const { streak, daysWithoutSpending, totalExpenses } = streakContext;
 
   const rows = periodRows;
 
@@ -198,13 +203,9 @@ export default async function DashboardPage({
   const sortedGroups = [...byGroup.entries()]
     .map(([label, { amount, id }]) => ({ label, amount, id }))
     .sort((a, b) => b.amount - a.amount);
-  const categoryItems =
-    sortedGroups.length > 6
-      ? [
-          ...sortedGroups.slice(0, 5),
-          { label: "Otros", amount: sortedGroups.slice(5).reduce((s, i) => s + i.amount, 0) },
-        ]
-      : sortedGroups;
+  // El recorte a top 5 + barra agrupada vive en `CategoryBars`: ahí "ver todas"
+  // expande sin otro request. La página manda la lista completa.
+  const categoryItems = sortedGroups;
 
   // Desglose por medio de pago.
   const methodType = new Map((methods ?? []).map((m) => [m.id, m.type as string]));
@@ -336,6 +337,19 @@ export default async function DashboardPage({
         {hasData && <StatTiles tiles={statTiles} className="lg:col-span-2" />}
       </section>
 
+      {streak.days.length > 0 && (
+        <StreakCard
+          current={streak.current}
+          longest={streak.longest}
+          freezes={streak.freezes}
+          atRisk={streak.atRisk}
+          backlog={streak.backlog}
+          days={streak.days}
+          daysWithoutSpending={daysWithoutSpending}
+          totalExpenses={totalExpenses}
+        />
+      )}
+
       {showFilters && (
         <DashboardFilters
           categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
@@ -370,7 +384,7 @@ export default async function DashboardPage({
                     sin esto el contenido de abajo saltaría al montarlo. */}
                 <div
                   className="rounded-xl border border-border bg-card p-4"
-                  style={{ minHeight: categoryBlockHeight(categoryItems.length) + 32 }}
+                  style={{ minHeight: categoryBlockHeight(collapsedRowCount(categoryItems.length)) + 32 }}
                 >
                   <CategoryBars
                     items={categoryItems}
