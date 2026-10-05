@@ -56,7 +56,9 @@ export function StreakCard({
           </p>
           <p className="mt-1 flex items-baseline gap-2">
             <Flame className={cn("size-5 shrink-0", atRisk ? "text-[#c9904e]" : "text-[var(--chart-1)]")} />
-            <span className="text-2xl font-semibold tracking-tight tabular-nums">{current}</span>
+            <span className="font-heading text-3xl font-medium tracking-tight tabular-nums">
+              {current}
+            </span>
             <span className="text-sm text-muted-foreground">
               {current === 1 ? "día al día" : "días al día"}
             </span>
@@ -68,7 +70,7 @@ export function StreakCard({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
           {freezes > 0 && (
             <span
               className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground"

@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { StreakShareCard } from "@/lib/share-card";
 import { loadStreakContext } from "@/lib/streak-data";
+import { loadShareFonts } from "@/lib/share-fonts";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,10 @@ export async function GET(request: Request) {
 
   const format = new URL(request.url).searchParams.get("format");
   const { width, height } = format === "link" ? SIZES.link : SIZES.story;
-  const { streak, totalExpenses } = await loadStreakContext(user.id);
+  const [{ streak, totalExpenses }, fonts] = await Promise.all([
+    loadStreakContext(user.id),
+    loadShareFonts(),
+  ]);
 
   return new ImageResponse(
     (
@@ -29,6 +33,10 @@ export async function GET(request: Request) {
         height={height}
       />
     ),
-    { width, height },
+    {
+      width,
+      height,
+      fonts: fonts.length > 0 ? fonts : undefined,
+    },
   );
 }
