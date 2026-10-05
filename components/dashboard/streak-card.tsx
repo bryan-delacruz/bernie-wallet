@@ -114,7 +114,7 @@ export function StreakCard({
         )}
         {backlog > 0 && (
           <Link
-            href="/activity"
+            href="/activity?cat=none"
             className="underline-offset-4 transition-colors hover:text-foreground hover:underline"
           >
             Ponerte al día: {backlog} sin categoría

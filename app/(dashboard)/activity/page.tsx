@@ -15,6 +15,8 @@ const TIPO_LABEL: Record<string, string> = {
 };
 
 const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
+/** Pseudo-categoría para filtrar lo que todavía no tiene categoría. */
+const UNCATEGORIZED = "none";
 
 // Orden de la lista según el searchParam `sort` → columna + dirección.
 const SORT_ORDER: Record<string, { col: "occurred_at" | "amount"; asc: boolean }> = {
@@ -70,6 +72,13 @@ export default async function ActivityPage({
         .maybeSingle(),
     ]);
   const subList = subs ?? [];
+  // Cola de trabajo del usuario: alimenta el chip "Sin categoría" y la insignia
+  // del menú (SPEC §16.4: el backlog se muestra, pero no entra en la racha).
+  const { count: pendingExpenses } = await supabase
+    .from("expenses")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .is("subcategory_id", null);
   const hasBank = (bankCount ?? 0) > 0;
 
   // Gastos con filtros server-side (funciona más allá del tope y URLs compartibles).
@@ -87,8 +96,19 @@ export default async function ActivityPage({
   }
   if (method) query = query.eq("payment_method_id", method);
   if (catIds.length) {
-    const subIds = subList.filter((s) => catIds.includes(s.category_id)).map((s) => s.id);
-    query = query.in("subcategory_id", subIds.length ? subIds : [NO_MATCH_UUID]);
+    // "none" es la pseudo-categoría de los gastos sin categorizar: viaja por el
+    // mismo parámetro que las demás para que los chips y la URL no cambien.
+    const wantsUncategorized = catIds.includes(UNCATEGORIZED);
+    const realCatIds = catIds.filter((id) => id !== UNCATEGORIZED);
+    const subIds = subList.filter((s) => realCatIds.includes(s.category_id)).map((s) => s.id);
+
+    if (wantsUncategorized && subIds.length) {
+      query = query.or(`subcategory_id.is.null,subcategory_id.in.(${subIds.join(",")})`);
+    } else if (wantsUncategorized) {
+      query = query.is("subcategory_id", null);
+    } else {
+      query = query.in("subcategory_id", subIds.length ? subIds : [NO_MATCH_UUID]);
+    }
   }
 
   const { data: rawExpenses } = await query
@@ -157,7 +177,12 @@ export default async function ActivityPage({
 
       {showFilters && (
         <ActivityFilters
-          categories={categoryOptions.map((c) => ({ id: c.id, label: c.name }))}
+          categories={[
+            ...((pendingExpenses ?? 0) > 0
+              ? [{ id: UNCATEGORIZED, label: `Sin categoría (${pendingExpenses})` }]
+              : []),
+            ...categoryOptions.map((c) => ({ id: c.id, label: c.name })),
+          ]}
           methods={paymentMethodOptions}
         />
       )}

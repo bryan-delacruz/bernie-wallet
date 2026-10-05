@@ -27,7 +27,24 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function DashboardNav() {
+/** Insignia discreta: dice cuántos gastos esperan categoría, sin interrumpir.
+ *  Se corta en 99 para no deformar el ítem del menú. */
+function PendingBadge({ count, className }: { count: number; className?: string }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      aria-label={`${count} gastos sin categoría`}
+      className={cn(
+        "rounded-full bg-[#c9904e]/15 px-1.5 py-0.5 text-[10px] font-medium text-[#c9904e] tabular-nums",
+        className,
+      )}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+export function DashboardNav({ pendingExpenses = 0 }: { pendingExpenses?: number }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -62,6 +79,9 @@ export function DashboardNav() {
             >
               <Icon className="size-5" />
               {label}
+              {href === "/activity" && (
+                <PendingBadge count={pendingExpenses} className="ml-auto" />
+              )}
             </Link>
           ))}
         </nav>
@@ -89,7 +109,15 @@ export function DashboardNav() {
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon className="size-5" />
+            <span className="relative">
+              <Icon className="size-5" />
+              {href === "/activity" && pendingExpenses > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute -top-0.5 -right-1 size-2 rounded-full bg-[#c9904e]"
+                />
+              )}
+            </span>
             {label}
           </Link>
         ))}
