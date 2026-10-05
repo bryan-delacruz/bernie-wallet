@@ -10,6 +10,8 @@ import { StatTiles } from "@/components/dashboard/stat-tiles";
 import { CategoryBars, PaymentSplit, MonthlyTrend } from "@/components/dashboard/lazy-charts";
 import { categoryBlockHeight, collapsedRowCount } from "@/components/dashboard/chart-metrics";
 import { StreakCard } from "@/components/dashboard/streak-card";
+import { ChallengeCard, type ChallengeTarget } from "@/components/dashboard/challenge-card";
+import { loadActiveChallenge } from "@/lib/challenges-data";
 import { loadStreakContext } from "@/lib/streak-data";
 import { formatCurrency, formatShortDate, limaMonthRange } from "@/lib/format";
 
@@ -153,10 +155,11 @@ export default async function DashboardPage({
   };
 
   // La racha es un dato del usuario, no del periodo: ignora los filtros a propósito.
-  const [{ rows: periodRows }, { rows: trendRows }, streakContext] = await Promise.all([
+  const [{ rows: periodRows }, { rows: trendRows }, streakContext, challenge] = await Promise.all([
     fetchAllRows<ExpenseRow>(periodPage),
     fetchAllRows<TrendRow>(trendPage),
     loadStreakContext(user.id),
+    loadActiveChallenge(user.id),
   ]);
   const { streak, daysWithoutSpending, totalExpenses } = streakContext;
 
@@ -206,6 +209,14 @@ export default async function DashboardPage({
   // El recorte a top 5 + barra agrupada vive en `CategoryBars`: ahí "ver todas"
   // expande sin otro request. La página manda la lista completa.
   const categoryItems = sortedGroups;
+
+  // Objetivos posibles de un reto: cada categoría y, debajo, sus subcategorías.
+  const challengeTargets: ChallengeTarget[] = (cats ?? []).flatMap((c) => [
+    { value: `cat:${c.id}`, label: c.name },
+    ...subList
+      .filter((s) => s.category_id === c.id)
+      .map((s) => ({ value: `sub:${s.id}`, label: s.name as string, nested: true })),
+  ]);
 
   // Desglose por medio de pago.
   const methodType = new Map((methods ?? []).map((m) => [m.id, m.type as string]));
@@ -348,6 +359,10 @@ export default async function DashboardPage({
           daysWithoutSpending={daysWithoutSpending}
           totalExpenses={totalExpenses}
         />
+      )}
+
+      {streak.days.length > 0 && (
+        <ChallengeCard challenge={challenge} targets={challengeTargets} />
       )}
 
       {showFilters && (
