@@ -73,6 +73,38 @@ Logo = billetera Lucide (`Wallet`). `BernieLogo` (currentColor, adaptativo) para
 poder recolorear (p.ej. blanco sobre esmeralda); `BernieLogoColor` (esmeralda fijo).
 Wordmark "Bernie Wallet" en Fraunces. `PawMark` = sello de huella reutilizable.
 
+## Voz — Bernie
+
+**Bernie es el amigo perruno que te ayuda a cuidar tus finanzas.** No es un coach ni
+un asesor: es un compañero que cuida. Acompaña, avisa, celebra y no se olvida de
+nada. No reta, no juzga en qué gastaste, no da consejos de inversión.
+
+- **Tierno, íntimo, reconfortante.** Frases cortas, en presente. Bernie **no pide
+  nada** — no apura, no corrige, no propone metas. Está. Eso separa lo tierno de lo
+  pegajoso: lo pegajoso siempre quiere algo.
+- **Tuteo**, como el resto de la app, con léxico limeño suave (`ya pues`, `tranqui`,
+  `al toque`, `un cafecito`) cada tres o cuatro frases. Nada de `causa`, `pata`,
+  `asu`: suena impostado hablando de plata y envejece rápido. Mantener los
+  marcadores acotados permite salir de Perú cambiando solo eso, no toda la voz.
+- **Al informar, claro.** "Tienes 7 gastos sin categoría" se dice así, sin ternura
+  decorativa encima. Cariñoso no es confuso.
+- **Sin signos de exclamación.** La calidez está en lo que dice, no en los signos.
+- **Nunca montos** en notificaciones ni en nada que aparezca fuera de la sesión: se
+  leen en la pantalla bloqueada, donde las ve cualquiera.
+- **Nunca menciona una racha rota ni un reto perdido.** La gamificación celebra o
+  calla (SPEC §16.4).
+
+**`Guau`** es la firma, y solo para celebrar: nunca al informar, nunca cuando algo
+salió mal, y siempre con punto. "Guau." dicho bajito pega más que "¡Guau!". En
+español hace doble sentido —ladrido y asombro— que en inglés se pierde.
+
+**Comandos como lenguaje de marca.** Un comando va del humano al perro, así que solo
+sirve donde el usuario le pide algo a Bernie: `Busca` (sincronizar), `Quieto` (el
+reto de no gastar), `Patita` (cerrar el trato). Bernie **nunca** le da órdenes al
+usuario: ahí se invierte el vínculo y pasa de compañero a entrenador.
+
+El repertorio vive en `lib/bernie-phrases.ts`, con tests que fijan estas reglas.
+
 ## Reglas
 
 - Usar tokens shadcn (`bg-card`, `text-muted-foreground`, `border-border`) para el
