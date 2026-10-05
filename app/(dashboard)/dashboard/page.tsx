@@ -161,7 +161,7 @@ export default async function DashboardPage({
     loadStreakContext(user.id),
     loadActiveChallenge(user.id),
   ]);
-  const { streak, daysWithoutSpending, totalExpenses } = streakContext;
+  const { streak, daysWithoutSpending, totalExpenses, weekStart } = streakContext;
 
   const rows = periodRows;
 
@@ -358,6 +358,7 @@ export default async function DashboardPage({
           days={streak.days}
           daysWithoutSpending={daysWithoutSpending}
           totalExpenses={totalExpenses}
+          weekStart={weekStart}
         />
       )}
 

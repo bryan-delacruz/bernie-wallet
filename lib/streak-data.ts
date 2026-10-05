@@ -2,7 +2,13 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/paginate";
-import { computeStreak, noSpendStreak, type Streak, type StreakExpense } from "@/lib/streak";
+import {
+  computeStreak,
+  noSpendStreak,
+  type Streak,
+  type StreakExpense,
+  type WeekStart,
+} from "@/lib/streak";
 import { achievementsFor, type Achievement } from "@/lib/achievements";
 import { limaToday, shiftDay } from "@/lib/format";
 
@@ -29,6 +35,8 @@ export type StreakContext = {
    *  cola real de trabajo del usuario. */
   pendingExpenses: number;
   achievements: Achievement[];
+  /** Primer día de la semana elegido por el usuario; por defecto lunes. */
+  weekStart: WeekStart;
   today: string;
 };
 
@@ -40,7 +48,7 @@ export const loadStreakContext = cache(async (userId: string): Promise<StreakCon
   // Un año: es lo que entra en la grilla y alcanza para todos los hitos de racha.
   const since = `${shiftDay(today, { days: 364 })}T05:00:00.000Z`;
 
-  const [{ rows }, { count }, { count: pending }] = await Promise.all([
+  const [{ rows }, { count }, { count: pending }, { data: profile }] = await Promise.all([
     fetchAllRows<StreakRow>((from, to) =>
       supabase
         .from("expenses")
@@ -57,6 +65,7 @@ export const loadStreakContext = cache(async (userId: string): Promise<StreakCon
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .is("subcategory_id", null),
+    supabase.from("users").select("week_starts_on").eq("id", userId).maybeSingle(),
   ]);
 
   const expenses: StreakExpense[] = rows.map((r) => ({
@@ -73,6 +82,7 @@ export const loadStreakContext = cache(async (userId: string): Promise<StreakCon
     daysWithoutSpending: noSpendStreak(expenses, today),
     totalExpenses,
     pendingExpenses: pending ?? 0,
+    weekStart: profile?.week_starts_on === "sunday" ? "sunday" : "monday",
     achievements: achievementsFor({
       streak,
       totalExpenses,

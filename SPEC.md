@@ -878,6 +878,18 @@ segundo. El de esta app es la **grilla de días**: una celda por día, llena si 
 contó. Es la misma idea que la grilla de contribuciones de GitHub o los anillos de
 Apple Watch, y cuenta la historia completa sin un solo dato privado.
 
+**La semana empieza el lunes**, como fija ISO 8601 y como se usa en la región.
+`Date.getUTCDay()` numera 0 = domingo, que es la convención estadounidense, así que
+`weekdayIndex()` rota. Configuración ofrece cambiarlo a domingo
+(`users.week_starts_on`, migración 0012) para quien venga de esa convención; un
+usuario nuevo arranca en lunes.
+
+**Los ejes viven solo en la app.** La grilla del dashboard lleva las iniciales de
+lunes, miércoles y viernes a la izquierda —las siete no entran a 9px, y en español M
+y S se repiten— y el mes arriba de la columna donde empieza. La imagen compartible no
+los lleva: se mira medio segundo en una historia, donde la grilla es una textura que
+dice "constancia", no un gráfico para leer.
+
 ### 16.6 Técnico
 
 - La racha, los logros y el conteo se cargan en `lib/streak-data.ts`

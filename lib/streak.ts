@@ -136,6 +136,19 @@ export function noSpendStreak(expenses: StreakExpense[], today: string): number 
   return count;
 }
 
+/** Primer día de la semana del usuario. El default es lunes (ISO 8601). */
+export type WeekStart = "monday" | "sunday";
+
+/**
+ * Posición del día dentro de la semana, 0 = primera fila de la grilla.
+ * `Date.getUTCDay()` numera 0 = domingo, que es la convención estadounidense;
+ * con la semana en lunes hay que rotar.
+ */
+export function weekdayIndex(day: string, weekStart: WeekStart = "monday"): number {
+  const sundayFirst = new Date(`${day}T00:00:00Z`).getUTCDay();
+  return weekStart === "sunday" ? sundayFirst : (sundayFirst + 6) % 7;
+}
+
 /** Hito alcanzado exactamente hoy, para ofrecer la tarjeta sin repetirla a diario. */
 export function reachedMilestone(current: number): number | null {
   return STREAK_MILESTONES.find((m) => m === current) ?? null;

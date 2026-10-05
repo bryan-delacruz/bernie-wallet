@@ -196,3 +196,20 @@ export async function revokeOrphanGrant(clientId: string): Promise<ActionResult>
   revalidatePath("/settings");
   return {};
 }
+
+/** Primer día de la semana (SPEC §16.5). Afecta la grilla de la racha y la
+ *  imagen compartible; el default de un usuario nuevo es lunes. */
+export async function updateWeekStart(weekStart: string): Promise<ActionResult> {
+  const { supabase, userId } = await requireUser();
+  if (weekStart !== "monday" && weekStart !== "sunday") return { error: "Opción inválida." };
+
+  const { error } = await supabase
+    .from("users")
+    .update({ week_starts_on: weekStart })
+    .eq("id", userId);
+  if (error) return { error: "No se pudo guardar la preferencia." };
+
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+  return {};
+}

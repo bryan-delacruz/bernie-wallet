@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Flame, Snowflake } from "lucide-react";
-import type { StreakDay } from "@/lib/streak";
+import { weekdayIndex, type StreakDay, type WeekStart } from "@/lib/streak";
 import { ShareStreakButton } from "@/components/dashboard/share-streak-button";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,7 @@ export function StreakCard({
   days,
   daysWithoutSpending,
   totalExpenses,
+  weekStart,
 }: {
   current: number;
   longest: number;
@@ -42,10 +43,10 @@ export function StreakCard({
   days: StreakDay[];
   daysWithoutSpending: number;
   totalExpenses: number;
+  weekStart: WeekStart;
 }) {
-  // La grilla se lee por columnas de semana, así que la primera columna arranca en
-  // el día de la semana real del primer día; si no, los domingos no se alinean.
-  const offset = days.length ? new Date(`${days[0].day}T00:00:00Z`).getUTCDay() : 0;
+  const weeks = toWeeks(days, weekStart);
+  const weekdayLabels = WEEKDAY_LABELS[weekStart];
 
   return (
     <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
@@ -84,20 +85,54 @@ export function StreakCard({
         </div>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
-        <div
-          className="grid w-max grid-flow-col grid-rows-7 gap-[3px]"
-          role="img"
-          aria-label={`Grilla de los últimos ${days.length} días: ${current} días seguidos al día.`}
-        >
-          {offset > 0 && <span style={{ gridRow: `span ${offset}` }} aria-hidden />}
-          {days.map((d) => (
-            <span
-              key={d.day}
-              title={`${d.day} · ${DAY_LABEL[d.state]}`}
-              className={cn("size-[9px] rounded-[2px]", DAY_STYLE[d.state])}
-            />
+      {/* El eje de días queda fuera del área que scrollea: con un año de datos la
+          grilla no entra en pantalla y, si el eje viaja con ella, se pierde la
+          referencia justo cuando hace falta. */}
+      <div className="mt-4 flex gap-1.5">
+        {/* Eje de días: solo lunes, miércoles y viernes. Las siete iniciales
+            juntas no entran a 9px, y en español M y S se repiten. */}
+        <div className="mt-4 grid grid-rows-7 gap-[3px] text-[9px] leading-[9px] text-muted-foreground">
+          {weekdayLabels.map((label, i) => (
+            <span key={i} className="h-[9px]">
+              {label}
+            </span>
           ))}
+        </div>
+
+        <div className="overflow-x-auto">
+            {/* Eje de meses: la etiqueta se ancla a la columna donde empieza el mes
+                y se desborda a la derecha, que es más angosta que el texto. */}
+            <div className="mb-1 flex h-3 gap-[3px] text-[9px] leading-3 text-muted-foreground">
+              {weeks.map((week, w) => (
+                <span key={w} className="relative w-[9px] shrink-0">
+                  {monthStart(week) && (
+                    <span className="absolute top-0 left-0 whitespace-nowrap">
+                      {monthStart(week)}
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+
+            <div
+              className="grid w-max grid-flow-col grid-rows-7 gap-[3px]"
+              role="img"
+              aria-label={`Grilla de los últimos ${days.length} días: ${current} días seguidos al día.`}
+            >
+              {weeks.map((week, w) =>
+                week.map((d, i) =>
+                  d ? (
+                    <span
+                      key={d.day}
+                      title={`${d.day} · ${DAY_LABEL[d.state]}`}
+                      className={cn("size-[9px] rounded-[2px]", DAY_STYLE[d.state])}
+                    />
+                  ) : (
+                    <span key={`${w}-${i}`} className="size-[9px]" aria-hidden />
+                  ),
+                ),
+              )}
+          </div>
         </div>
       </div>
 
@@ -123,4 +158,31 @@ export function StreakCard({
       </div>
     </section>
   );
+}
+
+/** Solo lunes, miércoles y viernes: las siete iniciales no entran a 9px, y en
+ *  español M y S se repiten. Las filas cambian según dónde empiece la semana. */
+const WEEKDAY_LABELS: Record<WeekStart, string[]> = {
+  monday: ["L", "", "X", "", "V", "", ""],
+  sunday: ["", "L", "", "X", "", "V", ""],
+};
+
+const monthFmt = new Intl.DateTimeFormat("es-PE", { timeZone: "UTC", month: "short" });
+
+/** Agrupa los días en columnas de 7 alineadas al lunes, rellenando la primera. */
+function toWeeks(days: StreakDay[], weekStart: WeekStart): (StreakDay | null)[][] {
+  if (days.length === 0) return [];
+  const cells: (StreakDay | null)[] = [
+    ...Array<null>(weekdayIndex(days[0].day, weekStart)).fill(null),
+    ...days,
+  ];
+  const weeks: (StreakDay | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
+}
+
+/** Nombre del mes si esta semana contiene su día 1; si no, nada. */
+function monthStart(week: (StreakDay | null)[]): string | null {
+  const first = week.find((d) => d?.day.endsWith("-01"));
+  return first ? monthFmt.format(new Date(`${first.day}T12:00:00Z`)).replace(".", "") : null;
 }
