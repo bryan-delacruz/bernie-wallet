@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import {
@@ -11,11 +11,12 @@ import {
 } from "@/components/ui/chart";
 import { formatCurrency } from "@/lib/format";
 import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
-import { categoryChartHeight } from "./chart-metrics";
+import { CATEGORY_TOP_N, categoryChartHeight, collapsedRowCount } from "./chart-metrics";
 import { cn } from "@/lib/utils";
 
-/** `id` solo viene en el nivel de categorías: es lo que permite entrar al desglose. */
-export type CategoryDatum = { label: string; amount: number; id?: string };
+/** `id` solo viene en el nivel de categorías: es lo que permite entrar al desglose.
+ *  `bucket` marca la barra que agrupa el resto; no tiene id ni drill-down. */
+export type CategoryDatum = { label: string; amount: number; id?: string; bucket?: boolean };
 
 type SortMode = "amount" | "name";
 
@@ -27,6 +28,8 @@ export function CategoryBars({
   currency,
   drillable = false,
 }: {
+  /** Todas las categorías del período, ya ordenadas por monto. El recorte a top 5
+   *  vive acá y no en la página: así "ver todas" no necesita otro request. */
   items: CategoryDatum[];
   currency: string;
   /** En el nivel de categorías, un clic filtra por esa categoría y entra a sus
@@ -34,6 +37,7 @@ export function CategoryBars({
   drillable?: boolean;
 }) {
   const [sort, setSort] = useState<SortMode>("amount");
+  const [expanded, setExpanded] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
   const router = useRouter();
   const pathname = usePathname();
@@ -49,12 +53,29 @@ export function CategoryBars({
     [params, pathname, router],
   );
 
+  // El resto se agrupa en una barra rotulada por cantidad ("+3 categorías"), nunca
+  // por nombre: "Otros" es también una categoría real del seed y se confundían.
+  const collapsible = items.length > collapsedRowCount(items.length);
+  const visible = useMemo(() => {
+    if (!collapsible || expanded) return items;
+    const rest = items.slice(CATEGORY_TOP_N);
+    const total = rest.reduce((sum, item) => sum + item.amount, 0);
+    return [
+      ...items.slice(0, CATEGORY_TOP_N),
+      {
+        label: rest.length === 1 ? "+1 categoría" : `+${rest.length} categorías`,
+        amount: total,
+        bucket: true,
+      },
+    ];
+  }, [items, collapsible, expanded]);
+
   if (items.length === 0) return null;
 
-  // "Otros" (bucket de sobrantes) siempre al final, sin importar el orden elegido.
-  const sorted = [...items].sort((a, b) => {
-    if (a.label === "Otros") return 1;
-    if (b.label === "Otros") return -1;
+  // La barra agrupada siempre al final, sin importar el orden elegido.
+  const sorted = [...visible].sort((a, b) => {
+    if (a.bucket) return 1;
+    if (b.bucket) return -1;
     return sort === "amount" ? b.amount - a.amount : a.label.localeCompare(b.label, "es");
   });
   // Headroom en el eje para que la etiqueta del monto no se corte al borde.
@@ -62,13 +83,23 @@ export function CategoryBars({
   // Alto derivado de las filas: con un alto fijo, una sola categoría producía una
   // barra desproporcionada y seis quedaban apretadas. La página reserva este mismo
   // alto mientras carga el chunk de Recharts.
-  const chartHeight = categoryChartHeight(sorted.length);
+  const chartHeight = categoryChartHeight(sorted.length, !expanded);
 
   return (
     <div className="space-y-3">
-      {items.length > 1 && (
-        <div className="flex justify-end">
-          <SortToggle value={sort} onChange={setSort} />
+      {(items.length > 1 || collapsible) && (
+        <div className="flex items-center justify-end gap-3">
+          {collapsible && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              className="text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              {expanded ? "Ver menos" : `Ver todas (${items.length})`}
+            </button>
+          )}
+          {items.length > 1 && <SortToggle value={sort} onChange={setSort} />}
         </div>
       )}
 
@@ -96,14 +127,13 @@ export function CategoryBars({
             fill="var(--color-amount)"
             radius={[0, 4, 4, 0]}
             isAnimationActive={!reducedMotion}
-            cursor={drillable ? "pointer" : undefined}
-            onClick={
-              drillable
-                ? (data: { payload?: CategoryDatum }) => {
-                    if (data.payload?.id) drillInto(data.payload.id);
-                  }
-                : undefined
-            }
+            cursor={drillable || collapsible ? "pointer" : undefined}
+            onClick={(data: { payload?: CategoryDatum }) => {
+              // Sobre la barra agrupada el clic abre el detalle, que es lo que el
+              // usuario busca al tocarla; no hay categoría a la que bajar.
+              if (data.payload?.bucket) setExpanded(true);
+              else if (drillable && data.payload?.id) drillInto(data.payload.id);
+            }}
           >
             <LabelList
               dataKey="amount"

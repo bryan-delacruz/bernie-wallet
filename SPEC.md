@@ -438,6 +438,8 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 8. **Activity** (lista de gastos): enfoque en **operar/encontrar**. Incluye
    **Agregar gasto** (manual) y **Sincronizar** (con estado de última sync), más
    filtros, búsqueda y **ordenamiento** de la lista (fecha ↕, monto ↕).
+9. **Gamificación y logros compartibles** (§16): racha diaria, catálogo corto de
+   logros e imágenes para redes. Sin datos privados y sin página pública.
 
 > **Responsive (soporte desde 320px).** En móvil los filtros se colapsan en un
 > **bottom-sheet** (`components/ui/sheet.tsx`, sobre la primitiva Dialog de Base UI):
@@ -477,6 +479,18 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 > El import dinámico vive en `components/dashboard/lazy-charts.tsx`, que es un
 > **componente cliente**: si la página (Server Component) hiciera el `next/dynamic`,
 > Next no divide el chunk — ver `node_modules/next/dist/docs/01-app/02-guides/lazy-loading.md`.
+>
+> **Desglose por categoría: top 5 + resto expandible.** El desglose pinta las **5
+> categorías de mayor gasto** y agrupa las restantes en una sola barra, que se rotula
+> con su cantidad (`+3 categorías`, `+1 categoría`) y **nunca** con un nombre de
+> categoría: el nombre "Otros" chocaba con la categoría real del mismo nombre que
+> trae el seed, y un gasto parecía caer en una categoría a la que el modelo de datos
+> no puede asignarlo. La agrupación solo entra con **más de 6** categorías; con 6 o
+> menos se pintan todas. La barra agrupada va siempre al final, no es clickeable para
+> bajar de nivel, y un clic sobre ella **expande** el desglose. El control
+> "Ver todas (N) / Ver menos" hace lo mismo desde el encabezado del bloque. Expandido,
+> el alto deja de estar topado para que las filas no se apelmacen, y cada categoría
+> recupera su drill-down.
 >
 > **Alturas derivadas del contenido.** El desglose por categoría calcula su alto por
 > número de filas (~34px por fila, con mínimo y máximo) en vez de un alto fijo: con
@@ -783,3 +797,127 @@ desconectarlas en Configuración".
   webhooks) no depende de Supabase; si cambia, se reemplaza solo el servidor de
   autorización sin tocar a los clientes.
 - **Una sola base compartida** (§11.1): antes de producción real, separar dev/prod.
+
+## 16. Gamificación y logros compartibles (hito 14)
+
+### 16.1 Objetivo
+
+Dar al usuario un motivo para volver cada día y algo que pueda publicar en sus redes
+sin exponer su vida financiera. El público objetivo es joven y quiere mostrar lo que
+hace; la app tiene que dejarlo presumir **disciplina**, nunca **consumo**.
+
+### 16.2 Regla de privacidad (manda sobre todo lo demás)
+
+Lo compartible se construye **solo** con conteos, rachas, porcentajes y fechas.
+
+Queda **prohibido** en cualquier imagen o texto compartible:
+
+- Montos, saldos, promedios y proyecciones, en cualquier moneda.
+- Nombres de comercio (`expenses.merchant`), que revelan ubicación y rutina.
+- Nombres de personas, que llegan como comercio en Yape/Plin y transferencias.
+- Medio de pago, que insinúa el perfil crediticio.
+- Nombres de categoría: en un historial real las que más pesan suelen ser Salud o
+  Transferencias, que son justamente las íntimas.
+
+De esta regla se deriva la decisión técnica más importante del hito: como el
+contenido no es sensible y no hay nada que proteger con un token, **no existe página
+pública de share ni tabla `shares`**. La imagen se genera y se entrega al usuario; él
+decide dónde la publica. Sin ruta pública no hay datos personales fuera de RLS, ni
+link que revocar, ni snapshot que versionar.
+
+### 16.3 Racha diaria ("estar al día")
+
+**Un día cuenta** si al cerrarse no queda ningún gasto de ese día sin `subcategory_id`.
+Un día sin gastos cuenta solo: el usuario está al día.
+
+La definición nace de la mecánica de Duolingo, donde la racha funciona porque la
+acción diaria **siempre está disponible** (siempre se puede hacer una lección). En
+esta app categorizar depende de que haya habido un gasto, así que la acción que
+siempre está disponible es *estar al día*, no *categorizar*. Medir eso y no el número
+de gastos tocados evita castigar al usuario por un día tranquilo.
+
+- La racha se **deriva de `expenses`**; no hay tabla ni contador que mantener, así que
+  no puede desfasarse del dato real.
+- **Un gasto importado después del cierre de su día nunca rompe la racha hacia atrás.**
+  El sync puede traer un correo con retraso y el usuario no controla eso. Esos gastos
+  van a "ponerte al día", que vive **fuera** de la racha.
+- El backlog histórico (gastos viejos sin categoría) tampoco entra en la racha: una
+  meta que arranca en una montaña desmotiva. Se muestra aparte, como progreso propio.
+
+**Congeladas.** Hasta 2 acumulables, otorgadas automáticamente al llegar a 7 y a 30
+días; una congelada se consume sola para cubrir un día incumplido. No se compran ni se
+reclaman: están en el bolsillo del usuario antes de necesitarlas. Existen porque una
+racha rota es el momento en que se pierde al usuario.
+
+### 16.4 Catálogo de logros
+
+- **Racha de días al día** — el loop principal. Hitos compartibles a los 7, 30, 100 y
+  365 días. El de 7 es el que más importa.
+- **Mes 100% categorizado.**
+- **Movimientos anotados automáticamente** — hitos en 100, 500 y 1000. Es el logro que
+  mejor cuenta la promesa del producto: muchos gastos registrados, cero escritos a mano.
+- **Días seguidos sin gastar.**
+- **Retos de abstinencia** (30 días sin delivery, semana sin taxis). Se comparten
+  **en progreso**, no solo al terminar: un reto en curso invita a otros a sumarse, y
+  esa es la unidad que de verdad circula en redes.
+
+El catálogo se mantiene corto a propósito. Un catálogo grande se vuelve inventario
+muerto, y hay que seguir alimentándolo para siempre.
+
+**La gamificación celebra o calla, nunca reprocha.** No hay tarjeta de "gastaste más
+que el mes pasado", ni logros negativos, ni rachas rotas anunciadas con alarde.
+
+### 16.5 El objeto visual
+
+Un número suelto no se comparte; lo que se comparte es un objeto que se lee en medio
+segundo. El de esta app es la **grilla de días**: una celda por día, llena si el día
+contó. Es la misma idea que la grilla de contribuciones de GitHub o los anillos de
+Apple Watch, y cuenta la historia completa sin un solo dato privado.
+
+### 16.6 Técnico
+
+- La racha, los logros y el conteo se cargan en `lib/streak-data.ts`
+  (`loadStreakContext`, envuelto en `React.cache`): el layout, el dashboard y la ruta
+  de la imagen comparten una sola consulta por request. La lógica pura vive en
+  `lib/streak.ts` con tests en `lib/streak.test.ts`.
+- Imágenes con `next/og` `ImageResponse` en `app/api/share/streak/route.tsx`, que ya
+  se usa para los iconos de la PWA. Dos formatos: 1080×1920 para stories (default) y
+  1200×630 para enlaces (`?format=link`).
+- Entrega con la Web Share API cuando existe, descarga como alternativa.
+- Paleta y tipografía del sistema visual (`.interface-design/system.md`): la tarjeta
+  es una pieza de marca, no un pantallazo del dashboard.
+- Nada de esto necesita migración, salvo que más adelante se guarden los retos
+  elegidos por el usuario; la racha y los logros se calculan desde `expenses`.
+
+### 16.7 Celebración (no invasiva)
+
+El logro se celebra **después** de la acción del usuario, nunca encima de lo que
+está haciendo. Tres reglas:
+
+1. **Solo hitos.** El resto del progreso vive en la tarjeta de racha del dashboard,
+   que no interrumpe. Un modal por cada gasto categorizado sería ruido.
+2. **Una sola vez por logro.** Los logros ya celebrados se recuerdan en el navegador
+   (`localStorage`), no en la base: son derivados y no justifican una tabla.
+3. **Línea base silenciosa.** La primera vez no se celebra nada: se guardan los
+   logros que el usuario ya tenía. Si no, alguien con 90 días de racha abriría la app
+   y recibiría cuatro modales seguidos.
+
+El modal aparece con un retardo corto para no competir con el render de la página, y
+ofrece compartir o cerrar. Como los logros se calculan en el layout del grupo
+`(dashboard)`, la celebración llega también al categorizar en Activity, que es donde
+el usuario hace el trabajo.
+
+**Límite conocido:** `localStorage` es por navegador, así que un mismo logro puede
+volver a celebrarse en otro dispositivo. Se acepta a cambio de no crear tabla ni
+migración; si molesta, se mueve a una columna de `users`.
+
+### 16.7 Riesgos
+
+- **Latencia del sync.** Es el riesgo central y lo cubre la regla de §16.3: ningún
+  gasto importado tarde rompe una racha ya ganada.
+- **Fuga por acumulación.** Un solo logro no dice nada, pero varias tarjetas seguidas
+  podrían dibujar un patrón. Se mitiga manteniendo la regla de §16.2 sin excepciones,
+  en particular sin nombres de comercio ni de categoría.
+- **Virality menor que un "Wrapped" con nombres propios.** Es un costo aceptado y
+  consciente: a cambio funciona desde la primera semana, no se rompe nunca por
+  privacidad, y cada vez que alguien comparte está mostrando que la app anota sola.
