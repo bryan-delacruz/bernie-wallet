@@ -82,13 +82,31 @@ export function StreakShareCard({
 }): ReactElement {
   const weeks = toWeeks(days);
   const stacked = height > width;
-  const pad = Math.round(Math.min(width, height) * 0.09);
   const unit = Math.min(width, height); // escala tipográfica: el lado corto manda
 
+  // Zona segura de las historias de Instagram: la app dibuja su propia interfaz
+  // sobre la imagen —autor y sticker de música arriba, barra de respuesta y
+  // reacciones abajo— y tapa lo que quede ahí. El mínimo publicado es 14% arriba,
+  // 20% abajo y 6% a los lados; acá se va por encima de ese mínimo porque un
+  // sticker de enlace o de música baja todavía más el encabezado.
+  const inset = stacked
+    ? {
+        top: Math.round(height * 0.17),
+        bottom: Math.round(height * 0.22),
+        side: Math.round(width * 0.09),
+      }
+    : {
+        top: Math.round(height * 0.08),
+        bottom: Math.round(height * 0.08),
+        side: Math.round(width * 0.06),
+      };
+
   // El ancho disponible para la grilla cambia con la composición; la celda se topa
-  // por los dos ejes para que ni una semana ni un año se salgan de la tarjeta.
-  const gridWidth = stacked ? width - pad * 2 : (width - pad * 2) * 0.52;
-  const gridHeight = stacked ? height * 0.3 : height - pad * 2;
+  // por los dos ejes para que ni una semana ni un año se salgan de la zona segura.
+  const safeWidth = width - inset.side * 2;
+  const safeHeight = height - inset.top - inset.bottom;
+  const gridWidth = stacked ? safeWidth : safeWidth * 0.52;
+  const gridHeight = stacked ? safeHeight * 0.42 : safeHeight;
   const gap = Math.max(2, Math.round(unit * 0.005));
   const cell = Math.max(
     5,
@@ -150,7 +168,10 @@ export function StreakShareCard({
         height,
         display: "flex",
         flexDirection: "column",
-        padding: pad,
+        paddingTop: inset.top,
+        paddingBottom: inset.bottom,
+        paddingLeft: inset.side,
+        paddingRight: inset.side,
         background: PANEL,
         color: IVORY,
         fontFamily: "Geist",
@@ -195,7 +216,7 @@ export function StreakShareCard({
           {footer}
         </div>
       ) : (
-        <div style={{ display: "flex", flex: 1, alignItems: "center", gap: pad }}>
+        <div style={{ display: "flex", flex: 1, alignItems: "center", gap: inset.side }}>
           <div
             style={{
               display: "flex",

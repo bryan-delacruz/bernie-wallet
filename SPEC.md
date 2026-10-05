@@ -887,6 +887,12 @@ Apple Watch, y cuenta la historia completa sin un solo dato privado.
 - Imágenes con `next/og` `ImageResponse` en `app/api/share/streak/route.tsx`, que ya
   se usa para los iconos de la PWA. Dos formatos: 1080×1920 para stories (default) y
   1200×630 para enlaces (`?format=link`).
+- **Zona segura de las historias.** Instagram dibuja su propia interfaz encima de la
+  imagen: autor, sticker de música y de enlace arriba; barra de respuesta y
+  reacciones abajo. El mínimo publicado deja libre 14% arriba, 20% abajo y 6% a los
+  lados. El formato vertical usa márgenes mayores (17% / 22% / 9%) porque un sticker
+  de música o de enlace baja todavía más el encabezado. El formato de enlace no pasa
+  por esa interfaz y conserva márgenes normales.
 - Entrega con la Web Share API cuando existe, descarga como alternativa.
 - Paleta y tipografía del sistema visual (`.interface-design/system.md`): la tarjeta
   es una pieza de marca, no un pantallazo del dashboard.
