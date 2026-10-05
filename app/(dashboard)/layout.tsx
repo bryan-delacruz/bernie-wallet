@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
 import { isDemoUser } from "@/lib/demo";
+import { AchievementCelebration } from "@/components/dashboard/achievement-celebration";
+import { loadStreakContext } from "@/lib/streak-data";
 
 export default async function DashboardLayout({
   children,
@@ -29,6 +31,10 @@ export default async function DashboardLayout({
     redirect("/onboarding");
   }
 
+  // Los logros se calculan acá y no en cada página: así la celebración aparece
+  // después de categorizar en Activity, no solo al volver al dashboard.
+  const { achievements } = await loadStreakContext(user.id);
+
   return (
     <div className="min-h-screen">
       <DashboardNav />
@@ -40,6 +46,7 @@ export default async function DashboardLayout({
             </p>
           )}
           {children}
+          <AchievementCelebration earned={achievements} />
         </div>
       </main>
     </div>
