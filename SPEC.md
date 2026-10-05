@@ -889,6 +889,37 @@ Apple Watch, y cuenta la historia completa sin un solo dato privado.
 - Nada de esto necesita migración, salvo que más adelante se guarden los retos
   elegidos por el usuario; la racha y los logros se calculan desde `expenses`.
 
+### 16.6.1 Retos
+
+Un reto es una apuesta corta: **no gastar en una categoría durante N días**. Es la
+pieza que de verdad circula en redes, porque un reto en curso **invita** ("día 12 de
+30 sin delivery, ¿te sumás?") en vez de presumir un resultado cerrado.
+
+- **Uno activo a la vez.** Varios en paralelo convierten la mecánica en inventario y
+  ninguno se siente importante.
+- **Lo arma el usuario**: elige una categoría o subcategoría propia y una duración de
+  7, 14 o 30 días. Un catálogo fijo de nombres no sirve, porque las categorías son
+  del usuario y no se parecen entre cuentas.
+- **Romperlo no castiga: el contador se reinicia solo.** Un gasto de esa categoría
+  no cierra el reto ni pide volver a empezar a mano; el conteo arranca de nuevo al día
+  siguiente y el reto sigue en pie. No hay tarjeta de fracaso ni efecto sobre la
+  racha: §16.4 manda, la gamificación celebra o calla.
+- El progreso es **derivado**, igual que la racha: días desde el último gasto de esa
+  categoría, o desde el inicio del reto si no hubo ninguno. Se deriva también el
+  mejor intento, que es la racha limpia más larga desde que empezó. Lo único que se
+  guarda es la apuesta.
+- Un reto cumplido entra al catálogo de logros y se comparte como el resto, con la
+  misma regla de §16.2: el nombre de la categoría **no** viaja en la imagen, porque
+  puede ser Salud. La tarjeta dice "30 días sin gastar en una categoría" y el detalle
+  queda dentro de la app.
+
+**Modelo de datos** (`challenges`, migración 0011): `user_id`, `category_id` **o**
+`subcategory_id` (uno de los dos), `target_days`, `started_on`, `ended_on`,
+`outcome` ('active' | 'done' | 'abandoned'). No existe un estado "roto": romperlo
+reinicia el contador, no termina el reto. RLS por `user_id` y la
+política restrictiva "no oauth clients" como el resto de las tablas de usuario. Un
+índice único parcial garantiza un solo reto activo por usuario.
+
 ### 16.7 Celebración (no invasiva)
 
 El logro se celebra **después** de la acción del usuario, nunca encima de lo que
