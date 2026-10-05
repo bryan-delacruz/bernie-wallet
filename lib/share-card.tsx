@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import type { StreakDay } from "@/lib/streak";
+import { weekdayIndex, type StreakDay, type WeekStart } from "@/lib/streak";
 
 /**
  * Tarjeta de racha para redes (SPEC §16.5). Solo conteos, rachas y fechas: ni
@@ -32,9 +32,9 @@ const COUNTED: Record<StreakDay["state"], boolean> = {
 };
 
 /** Agrupa los días en columnas de 7, alineadas al día de la semana real. */
-function toWeeks(days: StreakDay[]): (StreakDay | null)[][] {
+function toWeeks(days: StreakDay[], weekStart: WeekStart): (StreakDay | null)[][] {
   if (days.length === 0) return [];
-  const offset = new Date(`${days[0].day}T00:00:00Z`).getUTCDay();
+  const offset = weekdayIndex(days[0].day, weekStart);
   const cells: (StreakDay | null)[] = [...Array<null>(offset).fill(null), ...days];
   const weeks: (StreakDay | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
@@ -71,16 +71,18 @@ export function StreakShareCard({
   current,
   days,
   totalExpenses,
+  weekStart,
   width,
   height,
 }: {
   current: number;
   days: StreakDay[];
   totalExpenses: number;
+  weekStart: WeekStart;
   width: number;
   height: number;
 }): ReactElement {
-  const weeks = toWeeks(days);
+  const weeks = toWeeks(days, weekStart);
   const stacked = height > width;
   const unit = Math.min(width, height); // escala tipográfica: el lado corto manda
 

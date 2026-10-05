@@ -1,6 +1,12 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { computeStreak, noSpendStreak, reachedMilestone, type StreakExpense } from "./streak.ts";
+import {
+  computeStreak,
+  noSpendStreak,
+  reachedMilestone,
+  weekdayIndex,
+  type StreakExpense,
+} from "./streak.ts";
 
 /** Gasto del día `day`, importado el mismo día salvo que se diga otra cosa. */
 function expense(day: string, categorized: boolean, importedDay = day): StreakExpense {
@@ -94,4 +100,14 @@ test("hitos solo en los números exactos", () => {
   assert.equal(reachedMilestone(7), 7);
   assert.equal(reachedMilestone(8), null);
   assert.equal(reachedMilestone(365), 365);
+});
+
+test("la semana empieza el lunes por defecto", () => {
+  assert.equal(weekdayIndex("2026-10-05"), 0, "lunes es la primera fila");
+  assert.equal(weekdayIndex("2026-10-11"), 6, "domingo es la última");
+});
+
+test("con la semana en domingo las filas rotan", () => {
+  assert.equal(weekdayIndex("2026-10-11", "sunday"), 0);
+  assert.equal(weekdayIndex("2026-10-05", "sunday"), 1);
 });

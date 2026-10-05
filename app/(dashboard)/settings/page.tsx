@@ -6,6 +6,7 @@ import {
   type PaymentMethod,
 } from "@/components/dashboard/payment-methods-settings";
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
+import { WeekStartToggle } from "@/components/dashboard/week-start-toggle";
 import { InstallApp } from "@/components/dashboard/install-app";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import {
@@ -24,16 +25,26 @@ export default async function SettingsPage() {
 
   // La demo no puede conectar apps (SPEC §15.5): la sección no se muestra.
   // Se pide en paralelo con el resto, no después.
-  const [{ data: systemBanks }, { data: userBanks }, { data: paymentMethods }, connected] =
-    await Promise.all([
-      supabase.from("system_banks").select("id, official_name").eq("active", true).order("official_name"),
-      supabase.from("user_banks").select("id, system_bank_id").eq("user_id", user.id),
-      supabase
-        .from("payment_methods")
-        .select("id, user_bank_id, type, identifier, alias")
-        .eq("user_id", user.id),
-      isDemoUser(user) ? null : loadConnectedApps(supabase, user.id),
-    ]);
+  const [
+    { data: systemBanks },
+    { data: userBanks },
+    { data: paymentMethods },
+    connected,
+    { data: profile },
+  ] = await Promise.all([
+    supabase
+      .from("system_banks")
+      .select("id, official_name")
+      .eq("active", true)
+      .order("official_name"),
+    supabase.from("user_banks").select("id, system_bank_id").eq("user_id", user.id),
+    supabase
+      .from("payment_methods")
+      .select("id, user_bank_id, type, identifier, alias")
+      .eq("user_id", user.id),
+    isDemoUser(user) ? null : loadConnectedApps(supabase, user.id),
+    supabase.from("users").select("week_starts_on").eq("id", user.id).maybeSingle(),
+  ]);
 
   const connectedIds = new Set((userBanks ?? []).map((b) => b.system_bank_id));
   const banks = (systemBanks ?? []).map((b) => ({
@@ -90,6 +101,11 @@ export default async function SettingsPage() {
       <section className="space-y-3">
         <h2 className={SECTION_TITLE}>Apariencia</h2>
         <ThemeToggle />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className={SECTION_TITLE}>La semana empieza el</h2>
+        <WeekStartToggle value={profile?.week_starts_on === "sunday" ? "sunday" : "monday"} />
       </section>
 
       <section className="space-y-3">

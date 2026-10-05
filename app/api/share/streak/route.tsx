@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   const format = new URL(request.url).searchParams.get("format");
   const { width, height } = format === "link" ? SIZES.link : SIZES.story;
-  const [{ streak, totalExpenses }, fonts] = await Promise.all([
+  const [{ streak, totalExpenses, weekStart }, fonts] = await Promise.all([
     loadStreakContext(user.id),
     loadShareFonts(),
   ]);
@@ -29,6 +29,7 @@ export async function GET(request: Request) {
         current={streak.current}
         days={streak.days}
         totalExpenses={totalExpenses}
+        weekStart={weekStart}
         width={width}
         height={height}
       />
