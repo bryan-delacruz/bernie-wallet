@@ -33,11 +33,11 @@ export default async function DashboardLayout({
 
   // Los logros se calculan acá y no en cada página: así la celebración aparece
   // después de categorizar en Activity, no solo al volver al dashboard.
-  const { achievements } = await loadStreakContext(user.id);
+  const { achievements, pendingExpenses } = await loadStreakContext(user.id);
 
   return (
     <div className="min-h-screen">
-      <DashboardNav />
+      <DashboardNav pendingExpenses={pendingExpenses} />
       <main className="overflow-x-clip px-5 pt-8 pb-24 md:pb-12 md:pl-[17rem]">
         <div className="mx-auto w-full max-w-5xl">
           {isDemoUser(user) && (

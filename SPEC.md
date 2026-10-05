@@ -842,7 +842,11 @@ de gastos tocados evita castigar al usuario por un día tranquilo.
   El sync puede traer un correo con retraso y el usuario no controla eso. Esos gastos
   van a "ponerte al día", que vive **fuera** de la racha.
 - El backlog histórico (gastos viejos sin categoría) tampoco entra en la racha: una
-  meta que arranca en una montaña desmotiva. Se muestra aparte, como progreso propio.
+  meta que arranca en una montaña desmotiva. Se muestra aparte, como progreso propio:
+  una insignia discreta en el ítem "Actividad" del menú (punto en móvil), el enlace
+  "Ponerte al día" de la tarjeta de racha, y un chip **Sin categoría** en los filtros
+  de Activity que viaja por el mismo parámetro `cat` con el valor `none`. El chip solo
+  aparece si hay pendientes: un filtro que siempre devuelve cero es ruido.
 
 **Congeladas.** Hasta 2 acumulables, otorgadas automáticamente al llegar a 7 y a 30
 días; una congelada se consume sola para cubrir un día incumplido. No se compran ni se

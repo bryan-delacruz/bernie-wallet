@@ -25,6 +25,9 @@ export type StreakContext = {
   streak: Streak;
   daysWithoutSpending: number;
   totalExpenses: number;
+  /** Gastos sin categoría de todo el historial, no solo del último año: es la
+   *  cola real de trabajo del usuario. */
+  pendingExpenses: number;
   achievements: Achievement[];
   today: string;
 };
@@ -37,7 +40,7 @@ export const loadStreakContext = cache(async (userId: string): Promise<StreakCon
   // Un año: es lo que entra en la grilla y alcanza para todos los hitos de racha.
   const since = `${shiftDay(today, { days: 364 })}T05:00:00.000Z`;
 
-  const [{ rows }, { count }] = await Promise.all([
+  const [{ rows }, { count }, { count: pending }] = await Promise.all([
     fetchAllRows<StreakRow>((from, to) =>
       supabase
         .from("expenses")
@@ -49,6 +52,11 @@ export const loadStreakContext = cache(async (userId: string): Promise<StreakCon
     ),
     // Solo el conteo: el hito de volumen no necesita las filas.
     supabase.from("expenses").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase
+      .from("expenses")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .is("subcategory_id", null),
   ]);
 
   const expenses: StreakExpense[] = rows.map((r) => ({
@@ -64,6 +72,7 @@ export const loadStreakContext = cache(async (userId: string): Promise<StreakCon
     streak,
     daysWithoutSpending: noSpendStreak(expenses, today),
     totalExpenses,
+    pendingExpenses: pending ?? 0,
     achievements: achievementsFor({
       streak,
       totalExpenses,
