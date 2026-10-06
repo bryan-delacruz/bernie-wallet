@@ -1,20 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Share2, Trophy } from "lucide-react";
-import { toast } from "sonner";
 import type { Achievement } from "@/lib/achievements";
-import { shareStreakImage } from "@/lib/share-image";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ShareStreakDialog } from "@/components/dashboard/share-streak-dialog";
 
 const STORAGE_KEY = "bernie.celebrated";
 
@@ -29,7 +17,6 @@ const STORAGE_KEY = "bernie.celebrated";
  */
 export function AchievementCelebration({ earned }: { earned: Achievement[] }) {
   const [celebrating, setCelebrating] = useState<Achievement | null>(null);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const ids = earned.map((a) => a.id);
@@ -60,35 +47,12 @@ export function AchievementCelebration({ earned }: { earned: Achievement[] }) {
     return () => clearTimeout(timer);
   }, [earned]);
 
-  async function share() {
-    setBusy(true);
-    try {
-      await shareStreakImage();
-    } catch {
-      toast.error("No se pudo preparar la imagen. Intenta de nuevo.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
-    <Dialog open={celebrating !== null} onOpenChange={(open) => !open && setCelebrating(null)}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <span className="mb-1 flex size-10 items-center justify-center rounded-full bg-[#0e7c58]/10 text-[#0e7c58]">
-            <Trophy className="size-5" aria-hidden />
-          </span>
-          <DialogTitle>{celebrating?.title}</DialogTitle>
-          <DialogDescription>{celebrating?.detail}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <DialogClose render={<Button variant="ghost" />}>Ahora no</DialogClose>
-          <Button onClick={share} disabled={busy}>
-            <Share2 className="size-4" aria-hidden />
-            Compartir
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ShareStreakDialog
+      open={celebrating !== null}
+      onOpenChange={(open) => !open && setCelebrating(null)}
+      title={celebrating?.title}
+      description={celebrating?.detail}
+    />
   );
 }

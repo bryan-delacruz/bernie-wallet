@@ -72,6 +72,7 @@ export function StreakShareCard({
   days,
   totalExpenses,
   weekStart,
+  caption,
   width,
   height,
 }: {
@@ -79,6 +80,9 @@ export function StreakShareCard({
   days: StreakDay[];
   totalExpenses: number;
   weekStart: WeekStart;
+  /** Una línea bajo la grilla que dice qué es cada celda. No son ejes: es el
+   *  título del gráfico, lo único que no sobra en una imagen que se ojea. */
+  caption: string;
   width: number;
   height: number;
 }): ReactElement {
@@ -214,7 +218,19 @@ export function StreakShareCard({
           }}
         >
           {headline}
-          <Grid weeks={weeks} cell={cell} gap={gap} />
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <Grid weeks={weeks} cell={cell} gap={gap} />
+            <div
+              style={{
+                display: "flex",
+                marginTop: Math.round(unit * 0.022),
+                fontSize: Math.round(unit * 0.024),
+                color: "rgba(246,244,239,0.5)",
+              }}
+            >
+              {caption}
+            </div>
+          </div>
           {footer}
         </div>
       ) : (
@@ -231,7 +247,19 @@ export function StreakShareCard({
             {headline}
             {footer}
           </div>
-          <Grid weeks={weeks} cell={cell} gap={gap} />
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <Grid weeks={weeks} cell={cell} gap={gap} />
+            <div
+              style={{
+                display: "flex",
+                marginTop: Math.round(unit * 0.022),
+                fontSize: Math.round(unit * 0.024),
+                color: "rgba(246,244,239,0.5)",
+              }}
+            >
+              {caption}
+            </div>
+          </div>
         </div>
       )}
     </div>

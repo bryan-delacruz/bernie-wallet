@@ -888,7 +888,24 @@ usuario nuevo arranca en lunes.
 lunes, miércoles y viernes a la izquierda —las siete no entran a 9px, y en español M
 y S se repiten— y el mes arriba de la columna donde empieza. La imagen compartible no
 los lleva: se mira medio segundo en una historia, donde la grilla es una textura que
-dice "constancia", no un gráfico para leer.
+dice "constancia", no un gráfico para leer. Es la misma lógica de las *sparklines* de
+Tufte, que por definición no tienen marcos ni marcas de eje, y la de la literatura de
+*glanceable visualization*: los ejes sirven a quien examina y estorban a quien ojea.
+GitHub sí rotula la suya porque vive en un perfil que se recorre y se consulta —mismo
+gráfico, otro medio, otro mobiliario.
+
+En su lugar la imagen lleva **una sola línea**: `cada cuadrito, un día`. No es un eje,
+es el **título** del gráfico, y explica lo único que nadie puede adivinar: qué
+representa una celda. La duración se intuye por el ancho, y decir "los últimos 12
+meses" sería falso para cualquiera que lleve menos de un año.
+
+**Lo que se ve en la app es lo que se comparte.** Antes de compartir, el usuario ve la
+tarjeta: el diálogo pide `/api/share/streak` y muestra **ese mismo archivo**, no una
+reconstrucción, así que no pueden desfasarse. Por eso también la grilla del dashboard
+usa los **dos tonos** de la imagen: un día cubierto por una congelada se pinta como
+contado —porque contó— y el detalle queda en el tooltip. Las únicas diferencias son de
+mobiliario, no de contenido: los ejes y el anillo que marca el día de hoy, que en una
+imagen compartida no significa nada.
 
 ### 16.6 Técnico
 
