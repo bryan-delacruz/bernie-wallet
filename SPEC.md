@@ -299,6 +299,34 @@ ALCANCE (v0):
 
 ---
 
+## 9.1 Sincronización automática y tope del botón
+
+El pipeline vive en `lib/sync/run-sync.ts` (`runSync(supabase, userId)`), no en el
+route handler, porque lo corren **dos llamadores**:
+
+- `POST /api/sync` — el botón, con el cliente del propio usuario y RLS activo.
+- `POST /api/internal/sync-all` — el cron, con la secret key, recorriendo a todos.
+
+Con la secret key **no hay RLS que respalde el aislamiento**: lo sostiene el código,
+filtrando por `user_id` en cada consulta. Es la única parte de la app donde eso es
+así, y por eso el pipeline está en un solo archivo y no repartido.
+
+**El cron corre tres veces al día** (migración 0013, `pg_cron`): 09:50, 14:50 y 21:50
+de Lima. Las notificaciones del banco llegan al instante, pero nadie revisa sus
+gastos cada hora; la de la mañana va antes de las 10 para que lo que diga Bernie a
+esa hora sea cierto. No se usan los crons de Vercel: el plan Hobby permite dos
+diarios y uno ya está tomado por `/api/health`.
+
+Un usuario que revocó el permiso de Gmail **no frena a los demás**: se cuenta como
+`sinAcceso` y la corrida sigue. Lo nota en la app, donde se le ofrece reconectar.
+
+**El botón tiene un mínimo de 2 minutos entre corridas** por usuario, verificado
+contra `sync_logs`. La cuota de Gmail es del proyecto y no de la persona: sin tope,
+alguien impaciente puede dejar sin sincronizar a los demás. La cuota diaria (mil
+millones de unidades, ~505 por sincronización completa) no es el límite real; el
+límite es el de 250 unidades por segundo y por usuario, que el pipeline no toca
+porque lee los correos de a uno.
+
 ## 10. Parser de extracción (programático, sin IA)
 
 Los correos de notificación de BCP/Yape son **plantillas generadas por máquina**:
