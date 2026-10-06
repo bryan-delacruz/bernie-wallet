@@ -192,10 +192,63 @@ export default function PrivacyPage() {
             leer ningún correo. Tus gastos ya registrados siguen en tu cuenta.
           </li>
           <li>
-            Para <strong>borrar tu cuenta y todos tus datos</strong>, escríbenos a{" "}
-            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> y los eliminamos.
+            Para <strong>borrar tu cuenta y todos tus datos</strong>, entra a{" "}
+            <strong>Configuración → Mis datos → Borrar cuenta</strong>. El borrado es
+            inmediato y definitivo: se eliminan tus gastos, categorías, medios de pago y
+            retos, y le quitamos a Bernie el permiso sobre tu Gmail. No guardamos copia.
+            Si prefieres que lo hagamos nosotros, escríbenos a{" "}
+            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
           </li>
         </ul>
+      </section>
+
+      <section>
+        <h2>Tus derechos sobre tus datos</h2>
+        <p>
+          Tratamos tus datos personales conforme a la{" "}
+          <strong>Ley N.° 29733, Ley de Protección de Datos Personales</strong> del Perú, y su
+          reglamento (D.S. 016-2024-JUS). Como titular de los datos puedes, en cualquier momento:
+        </p>
+        <ul>
+          <li>
+            <strong>Acceder</strong> a todo lo que guardamos de ti y llevártelo en un archivo:{" "}
+            <strong>Configuración → Mis datos → Descargar</strong>.
+          </li>
+          <li>
+            <strong>Rectificar</strong> cualquier gasto, categoría o medio de pago desde la propia
+            aplicación, cuando algo esté mal o incompleto.
+          </li>
+          <li>
+            <strong>Cancelar</strong> (suprimir) tus datos borrando tu cuenta desde{" "}
+            <strong>Configuración → Mis datos</strong>.
+          </li>
+          <li>
+            <strong>Oponerte</strong> al tratamiento retirando tu consentimiento: basta con quitar
+            el acceso a Gmail o borrar la cuenta.
+          </li>
+        </ul>
+        <p>
+          <strong>Finalidad y base legal.</strong> Usamos tus datos únicamente para registrar y
+          mostrarte tus propios gastos. La base legal es tu <strong>consentimiento</strong>, que
+          das al conectar tu Gmail y que puedes retirar cuando quieras, sin que eso afecte lo
+          hecho antes de retirarlo.
+        </p>
+        <p>
+          <strong>Conservación.</strong> Conservamos tus datos mientras tengas la cuenta abierta.
+          Al borrarla, se eliminan de inmediato y no quedan copias de respaldo con tu información
+          más allá de los plazos técnicos de nuestros proveedores de infraestructura. Las sesiones
+          de prueba del modo demo se borran solas a las 24 horas.
+        </p>
+        <p>
+          <strong>Transferencia internacional.</strong> Nuestros proveedores de infraestructura
+          alojan los datos fuera del Perú (Estados Unidos). Al usar Bernie Wallet aceptas ese flujo
+          transfronterizo, necesario para prestar el servicio.
+        </p>
+        <p>
+          Si crees que no atendimos bien tu solicitud, puedes reclamar ante la{" "}
+          <strong>Autoridad Nacional de Protección de Datos Personales (ANPD)</strong> del
+          Ministerio de Justicia y Derechos Humanos.
+        </p>
       </section>
 
       <section>

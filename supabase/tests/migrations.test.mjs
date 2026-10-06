@@ -213,6 +213,36 @@ await test("borrar al usuario en cascada no falla", async () => {
   assert.equal((await db.query(`select * from users`)).rows.length, 1);
 });
 
+await test("borrar la cuenta arrastra todo lo del usuario", async () => {
+  // El borrado de cuenta (derecho de supresión) depende de que la fila de `users`
+  // arrastre en cascada el resto. Si una tabla nueva olvida el `on delete cascade`,
+  // quedarían datos personales huérfanos y esta prueba falla.
+  const C = "00000000-0000-0000-0000-00000000000c";
+  await db.exec(`
+    insert into auth.users (id) values ('${C}');
+    insert into users (id, email) values ('${C}', 'c@x.com');
+    insert into categories (id, user_id, name) values ('10000000-0000-0000-0000-00000000000c', '${C}', 'Comida');
+    insert into subcategories (id, user_id, category_id, name) values ('20000000-0000-0000-0000-00000000000c', '${C}', '10000000-0000-0000-0000-00000000000c', 'Delivery');
+    insert into expenses (user_id, subcategory_id, amount, merchant, occurred_at, source) values ('${C}', '20000000-0000-0000-0000-00000000000c', 10.00, 'Rappi', now(), 'manual');
+    insert into google_tokens (user_id, encrypted_refresh_token) values ('${C}', 'secreto');
+    insert into user_banks (id, user_id, system_bank_id) values ('40000000-0000-0000-0000-00000000000c', '${C}', (select id from system_banks limit 1));
+    insert into payment_methods (user_id, user_bank_id, type, identifier) values ('${C}', '40000000-0000-0000-0000-00000000000c', 'credit_card', '1234');
+    insert into sync_discoveries (user_id, message_id, sender, subject, verdict) values ('${C}', 'm1', 'banco@bcp', 'Consumo', 'not_expense');
+    insert into sync_failures (user_id, message_id) values ('${C}', 'm2');
+    insert into challenges (user_id, category_id, target_days, started_on) values ('${C}', '10000000-0000-0000-0000-00000000000c', 7, current_date);
+  `);
+
+  await db.exec(`delete from users where id = '${C}'`);
+
+  for (const table of [
+    "expenses", "subcategories", "categories", "google_tokens", "user_banks",
+    "payment_methods", "sync_discoveries", "sync_failures", "challenges",
+  ]) {
+    const left = await db.query(`select count(*)::int as n from ${table} where user_id = $1`, [C]);
+    assert.equal(left.rows[0].n, 0, `${table} quedó con datos del usuario borrado`);
+  }
+});
+
 await test("cola de webhooks: reclamar, lease, completar y backoff", async () => {
   await db.exec(`delete from integration_events; insert into auth.users (id) values ('${A}'); insert into users (id, email) values ('${A}', 'a@x.com')`);
   await db.exec(`insert into integration_clients (client_id, name, webhook_url, webhook_secret) values ('wh', 'WH', 'https://wh.test', 'enc') on conflict do nothing`);
