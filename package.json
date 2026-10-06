@@ -11,7 +11,8 @@
     "db:new": "supabase migration new",
     "db:push": "supabase db push",
     "db:status": "supabase migration list",
-    "test:db": "node supabase/tests/migrations.test.mjs"
+    "test:db": "node supabase/tests/migrations.test.mjs",
+    "predev": "node scripts/check-dev-env.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

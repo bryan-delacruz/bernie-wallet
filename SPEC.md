@@ -571,6 +571,21 @@ requisitos de **Limited Use**. Además describe:
 
 ---
 
+## 14.5 Endurecimiento
+
+**Cabeceras de seguridad** (`next.config.ts`): `frame-ancestors 'none'` más
+`X-Frame-Options: DENY` contra clickjacking, `nosniff`,
+`Referrer-Policy: strict-origin-when-cross-origin` —las URLs llevan ids de
+categorías y no deben viajar a terceros—, `Permissions-Policy` cerrando cámara,
+micrófono, ubicación y pagos, y HSTS por un año. **No hay CSP completa todavía**:
+Next inyecta scripts en línea y una CSP estricta necesita nonces por request; es su
+propia tanda y romper la app por hacerla a medias sería peor.
+
+**Aviso de entorno** (`scripts/check-dev-env.mjs`, vía `predev`): mientras la base de
+desarrollo y la de producción sean la misma (§11.1), arrancar `pnpm dev` imprime una
+advertencia visible. Es un paliativo consciente, no la solución: la solución es
+separarlas.
+
 ## 14.4 Datos personales y derechos del titular (Ley 29733)
 
 Desde que hay usuarios que no son el autor, aplica la **Ley N.° 29733** y su
@@ -824,7 +839,10 @@ desconectarlas en Configuración".
 - **OAuth Server de Supabase en beta.** Mitigación: el contrato (OpenAPI, cursor,
   webhooks) no depende de Supabase; si cambia, se reemplaza solo el servidor de
   autorización sin tocar a los clientes.
-- **Una sola base compartida** (§11.1): antes de producción real, separar dev/prod.
+- **Una sola base compartida** (§11.1): antes de invitar usuarios reales, separar
+  dev/prod. Bloqueado por el límite de 2 proyectos gratis de Supabase: hay que pausar
+  otro proyecto, pagar el plan Pro, o levantar Supabase local con Docker, que es
+  gratis y además aísla del todo. Mientras tanto, `pnpm dev` avisa (§14.5).
 
 ## 16. Gamificación y logros compartibles (hito 14)
 
