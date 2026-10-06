@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isValidCategorySelection, replaceShares } from "@/lib/integrations/shares";
 import { scheduleWebhookDelivery } from "@/lib/integrations/webhook-delivery";
+import { deleteAuthUser, revokeGoogleAccess } from "@/lib/account";
 
 export type ActionResult = { error?: string };
 
@@ -212,4 +213,31 @@ export async function updateWeekStart(weekStart: string): Promise<ActionResult> 
   revalidatePath("/settings");
   revalidatePath("/dashboard");
   return {};
+}
+
+/**
+ * Borra la cuenta y todo lo que cuelga de ella (derecho de supresión, Ley 29733).
+ * Irreversible y sin copia: lo que se borra, se borra.
+ */
+export async function deleteAccount(): Promise<ActionResult> {
+  const { supabase, userId } = await requireUser();
+
+  // Primero Google: que deje de tener acceso al Gmail aunque lo demás falle.
+  const { data: token } = await supabase
+    .from("google_tokens")
+    .select("refresh_token")
+    .eq("user_id", userId)
+    .maybeSingle();
+  await revokeGoogleAccess(token?.refresh_token ?? null);
+
+  // La fila de users arrastra en cascada gastos, categorías, medios, tokens y retos.
+  const { error } = await supabase.from("users").delete().eq("id", userId);
+  if (error) return { error: "No se pudo borrar la cuenta. Intenta de nuevo." };
+
+  // Sin secret key el usuario queda en auth.users sin datos: puede volver a entrar
+  // y se le vuelve a sembrar el perfil. Molesto, no peligroso.
+  await deleteAuthUser(userId);
+  await supabase.auth.signOut();
+
+  redirect("/");
 }

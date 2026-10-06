@@ -571,6 +571,34 @@ requisitos de **Limited Use**. Además describe:
 
 ---
 
+## 14.4 Datos personales y derechos del titular (Ley 29733)
+
+Desde que hay usuarios que no son el autor, aplica la **Ley N.° 29733** y su
+reglamento (D.S. 016-2024-JUS, vigente desde el 31-03-2025). Lo que eso exige del
+producto, y dónde vive:
+
+- **Acceso y portabilidad.** `GET /api/export` devuelve en JSON todo lo que la app
+  guarda del usuario. Corre con su propia sesión, así que RLS garantiza que nadie
+  pueda pedir los datos de otro. **No incluye los tokens de Google**: son
+  credenciales, no datos del titular, y entregarlas en claro crearía el problema que
+  el cifrado evita.
+- **Supresión.** `deleteAccount()` revoca primero el permiso en Google, luego borra
+  la fila de `users` —que arrastra en cascada gastos, categorías, subcategorías,
+  medios, bancos, tokens, retos, descubrimientos y fallos de sync— y por último borra
+  el usuario de `auth.users` con la secret key. Ese orden importa: si falla el último
+  paso queda una cuenta sin datos, que es molesto; al revés quedarían datos vivos sin
+  dueño, que es grave. Una prueba de migraciones comprueba la cascada, así que una
+  tabla nueva que olvide `on delete cascade` hace fallar el build.
+- **Rectificación** y **oposición** ya existían: editar gastos en Activity, y
+  desconectar Gmail o borrar la cuenta.
+- La política de privacidad declara finalidad, base legal (consentimiento), plazo de
+  conservación, transferencia internacional y el canal de reclamo ante la ANPD.
+
+**Los logs no llevan contenido.** El sync registra conteos, nunca remitentes ni
+asuntos: un asunto del BCP incluye monto y comercio, y los logs viven en un tercero
+con otra retención y otros accesos. Lo que el usuario necesite ver de sus propios
+correos vive en `sync_discoveries`, protegido por RLS.
+
 ## 15. Apps conectadas: Casorio Club vía OAuth 2.1 (hito 13)
 
 > **Estado: propuesta, pendiente de aprobación.** Nada de esta sección se implementa

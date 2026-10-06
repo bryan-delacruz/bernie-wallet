@@ -146,17 +146,16 @@ export async function POST() {
     // Diagnóstico: si la búsqueda estricta no trae nada, comprobar si SÍ hay
     // correos de esos remitentes (sin filtro de asunto). Distingue "no matchea el
     // asunto" de "no hay correos". Solo corre cuando allIds=0 (barato).
-    console.log(`[sync] user=${user.id} estrictos=${allIds.length} query=${query}`);
+    // Los logs llevan conteos, nunca contenido: un asunto del banco incluye monto y
+    // comercio, y los logs viven en un tercero con otra retención y otros accesos.
+    // Lo que el usuario necesite ver de sus propios correos vive en
+    // `sync_discoveries`, protegido por RLS.
+    console.log(`[sync] user=${user.id} estrictos=${allIds.length}`);
     if (allIds.length === 0) {
       const wideQuery = `from:(${uniqueSenders.join(" OR ")}) after:${afterSeconds}`;
       const wideIds = await searchMessages(accessToken, wideQuery);
-      console.log(`[sync][diag] soloRemitente=${wideIds.length} remitentes=${uniqueSenders.join(", ")}`);
-      if (wideIds.length > 0) {
-        const sample = await getMessage(accessToken, wideIds[0]).catch(() => null);
-        if (sample) {
-          console.log(`[sync][diag] muestra from="${sample.from}" subject="${sample.subject}"`);
-        }
-      }
+      // Distingue "no matchea el asunto" de "no hay correos", sin decir cuáles.
+      console.log(`[sync][diag] user=${user.id} soloRemitente=${wideIds.length}`);
     }
 
     // Anti-duplicados (expenses) + dead-letter (sync_failures). En lotes para no

@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 import { WeekStartToggle } from "@/components/dashboard/week-start-toggle";
 import { InstallApp } from "@/components/dashboard/install-app";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
+import { AccountData } from "@/components/dashboard/account-data";
 import {
   ConnectedApps,
   type ConnectedApp,
@@ -111,6 +112,13 @@ export default async function SettingsPage() {
       <section className="space-y-3">
         <h2 className={SECTION_TITLE}>Instalar app</h2>
         <InstallApp />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className={SECTION_TITLE}>Mis datos</h2>
+        {/* La demo es una sesión anónima que se borra sola en 24 h: no hay cuenta
+            que borrar ni datos reales que exportar. */}
+        <AccountData canDelete={!isDemoUser(user)} />
       </section>
 
       <section className="space-y-3">
