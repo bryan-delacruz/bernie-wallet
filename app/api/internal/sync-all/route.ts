@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { GmailAuthError } from "@/lib/gmail/gmail-service";
-import { runSync } from "@/lib/sync/run-sync";
+import { recordSyncError, runSync } from "@/lib/sync/run-sync";
 
 export const runtime = "nodejs";
 // Recorrer a varios usuarios contra Gmail lleva su tiempo; el default de Vercel
@@ -52,14 +52,16 @@ export async function POST(request: Request) {
 
   for (const { user_id } of connected ?? []) {
     try {
-      const result = await runSync(admin, user_id);
+      const result = await runSync(admin, user_id, "cron");
       usuarios += 1;
       nuevos += result.nuevos;
     } catch (error) {
       // Un usuario que revocó el permiso no puede frenar al resto: se cuenta y se
       // sigue. Lo nota en la app, donde se le ofrece reconectar.
-      if (error instanceof GmailAuthError) sinAcceso += 1;
+      const gmailAuth = error instanceof GmailAuthError;
+      if (gmailAuth) sinAcceso += 1;
       else fallidos += 1;
+      await recordSyncError(admin, user_id, "cron", gmailAuth ? "gmail_auth" : "unexpected");
     }
   }
 

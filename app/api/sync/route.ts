@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { GmailAuthError } from "@/lib/gmail/gmail-service";
-import { runSync } from "@/lib/sync/run-sync";
+import { recordSyncError, runSync } from "@/lib/sync/run-sync";
 
 // Usa node:crypto (cifrado del token) y Buffer → forzamos runtime Node.
 export const runtime = "nodejs";
@@ -55,7 +55,12 @@ export async function POST() {
   } catch (error) {
     // Problema de acceso a Gmail (reconectable): el cliente muestra un modal que
     // sugiere cerrar sesión y volver a entrar, o continuar sin reconectar.
-    if (error instanceof GmailAuthError) {
+    const gmailAuth = error instanceof GmailAuthError;
+    // Queda constancia de la corrida fallida: sin esto, el usuario ve gastos que no
+    // aparecen y del lado de acá no hay forma de saberlo.
+    await recordSyncError(supabase, user.id, "manual", gmailAuth ? "gmail_auth" : "unexpected");
+
+    if (gmailAuth) {
       return NextResponse.json({ error: error.message, code: "gmail_auth" }, { status: 401 });
     }
     const message = error instanceof Error ? error.message : "Error al sincronizar.";

@@ -71,6 +71,10 @@ const TIPO_LABEL: Record<string, string> = {
 
 const SOURCE_TYPES = new Set<PaymentType>(["credit_card", "debit_card", "yape", "account"]);
 
+/** Quién disparó la corrida. Sirve para distinguir en los diagnósticos si falla
+ *  el cron (problema de todos) o el botón (problema de uno). */
+export type SyncSource = "manual" | "cron";
+
 export type SyncResult = {
   nuevos: number;
   procesados: number;
@@ -91,7 +95,11 @@ export type SyncResult = {
  * Lanza `GmailAuthError` si se perdió el acceso a Gmail; quien llama decide qué
  * hacer con eso.
  */
-export async function runSync(supabase: SupabaseClient, userId: string): Promise<SyncResult> {
+export async function runSync(
+  supabase: SupabaseClient,
+  userId: string,
+  source: SyncSource = "manual",
+): Promise<SyncResult> {
     // Bancos conectados del usuario → { system_bank_id: user_bank_id }
     const { data: userBanks } = await supabase
       .from("user_banks")
@@ -334,6 +342,9 @@ export async function runSync(supabase: SupabaseClient, userId: string): Promise
       last_sync_at: new Date(latestMs).toISOString(),
       emails_processed: resolved,
       emails_new: nuevos,
+      source,
+      discarded: descartados,
+      halted: detenido,
     });
 
     // restantes = recuperables aún sin importar (fuera del tope o por reintentar).
@@ -452,4 +463,36 @@ async function resolvePaymentMethod(
     .single();
   if (insertError) throw new Error("payment_methods insert failed");
   return created?.id ?? null;
+}
+
+/**
+ * Deja constancia de una corrida que falló. Sin esto, un usuario al que le falla el
+ * sync es invisible: él ve gastos que no aparecen y nadie se entera.
+ *
+ * El cursor **no avanza**: se repite el `last_sync_at` anterior, para que la
+ * siguiente corrida vuelva a mirar los mismos correos. Y se guarda un código corto,
+ * nunca el mensaje de error, que puede traer datos del correo.
+ */
+export async function recordSyncError(
+  supabase: SupabaseClient,
+  userId: string,
+  source: SyncSource,
+  errorCode: "gmail_auth" | "unexpected",
+): Promise<void> {
+  const { data: last } = await supabase
+    .from("sync_logs")
+    .select("last_sync_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  await supabase.from("sync_logs").insert({
+    user_id: userId,
+    last_sync_at: last?.last_sync_at ?? new Date(Date.now() - INITIAL_WINDOW_MS).toISOString(),
+    emails_processed: 0,
+    emails_new: 0,
+    source,
+    error_code: errorCode,
+  });
 }
