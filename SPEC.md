@@ -327,6 +327,36 @@ millones de unidades, ~505 por sincronización completa) no es el límite real; 
 límite es el de 250 unidades por segundo y por usuario, que el pipeline no toca
 porque lee los correos de a uno.
 
+## 9.2 Visibilidad de las sincronizaciones
+
+Un usuario al que le falla el sync era **invisible**: él veía gastos que no
+aparecían y del otro lado no había forma de saberlo. `sync_logs` solo registraba las
+corridas que terminaban bien.
+
+Ahora cada corrida deja una fila, termine como termine, con `source`
+(`manual` | `cron`), `discarded`, `halted` y `error_code`. **Solo números y
+códigos**: nunca el mensaje de error, que puede traer datos del correo, y nunca
+asuntos ni remitentes (§14.4).
+
+En las corridas fallidas **el cursor no avanza**: se repite el `last_sync_at`
+anterior, para que la siguiente vuelva a mirar los mismos correos.
+
+Deliberadamente **no se usa un servicio externo de monitoreo**. Cada tercero es un
+encargado de tratamiento más que declarar en la política de privacidad y ante la
+ANPD; con datos financieros, ese costo no se paga por un panel. Si algún día el
+volumen lo justifica, se evalúa con los datos ya anonimizados.
+
+Consulta de diagnóstico (desde el panel de Supabase, con service role):
+
+```sql
+select source, error_code, count(*) as corridas, count(distinct user_id) as usuarios
+from sync_logs
+where created_at > now() - interval '7 days'
+  and (error_code is not null or halted or discarded > 0)
+group by 1, 2
+order by corridas desc;
+```
+
 ## 10. Parser de extracción (programático, sin IA)
 
 Los correos de notificación de BCP/Yape son **plantillas generadas por máquina**:
