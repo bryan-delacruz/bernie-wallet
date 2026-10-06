@@ -30,6 +30,7 @@ export async function GET(request: Request) {
         days={streak.days}
         totalExpenses={totalExpenses}
         weekStart={weekStart}
+        caption="cada cuadrito, un día"
         width={width}
         height={height}
       />

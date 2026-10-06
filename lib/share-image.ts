@@ -1,12 +1,20 @@
 /**
- * Entrega la imagen de un logro al usuario: hoja nativa del teléfono (Instagram,
- * WhatsApp) cuando existe, descarga cuando no. No hay página pública ni link que
- * revocar: la imagen va directo a quien la pidió (SPEC §16.2).
+ * La imagen de la racha se pide una sola vez y se usa para dos cosas: mostrarla
+ * antes de compartir y compartirla. Lo que se previsualiza es el archivo real, no
+ * una reconstrucción, así que no pueden desfasarse.
+ *
+ * No hay página pública ni link que revocar: la imagen va directo a quien la pidió
+ * (SPEC §16.2).
  */
-export async function shareStreakImage(): Promise<"shared" | "downloaded" | "cancelled"> {
+
+export async function fetchStreakImage(): Promise<Blob> {
   const response = await fetch("/api/share/streak");
   if (!response.ok) throw new Error("No se pudo generar la imagen");
-  const blob = await response.blob();
+  return response.blob();
+}
+
+/** Hoja nativa del teléfono (Instagram, WhatsApp) cuando existe; descarga cuando no. */
+export async function shareBlob(blob: Blob): Promise<"shared" | "downloaded" | "cancelled"> {
   const file = new File([blob], "bernie-racha.png", { type: "image/png" });
 
   if (navigator.canShare?.({ files: [file] })) {

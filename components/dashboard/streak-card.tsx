@@ -4,14 +4,16 @@ import { weekdayIndex, type StreakDay, type WeekStart } from "@/lib/streak";
 import { ShareStreakButton } from "@/components/dashboard/share-streak-button";
 import { cn } from "@/lib/utils";
 
-/** Color de cada estado de día en la grilla. El bronce marca lo que el usuario
- *  "salvó" (congelada) y lo que todavía puede salvar (hoy); el esmeralda, lo
- *  cumplido. Un día sin gastos cuenta, pero se pinta más tenue: no es lo mismo
- *  estar al día habiendo gastado que no haber gastado. */
+/** Dos tonos, los mismos que en la imagen compartible: el día contó o no contó.
+ *  Lo que ves en la app tiene que ser lo que compartes, así que un día cubierto por
+ *  una congelada se pinta como contado —porque contó— y el detalle vive en el
+ *  tooltip. Un día sin gastos cuenta, pero va más tenue: no es lo mismo estar al
+ *  día habiendo gastado que no haber gastado. El anillo de hoy es lo único propio
+ *  de la app: marca lo que todavía puedes salvar, y en la imagen no tiene sentido. */
 const DAY_STYLE: Record<StreakDay["state"], string> = {
   clean: "bg-[var(--chart-1)]",
   quiet: "bg-[var(--chart-1)]/30",
-  frozen: "bg-[#c9904e]",
+  frozen: "bg-[var(--chart-1)]",
   missed: "bg-muted-foreground/15",
   pending: "bg-muted-foreground/15 ring-1 ring-[#c9904e] ring-inset",
 };

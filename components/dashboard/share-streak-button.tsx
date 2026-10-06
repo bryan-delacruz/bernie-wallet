@@ -2,28 +2,19 @@
 
 import { useState } from "react";
 import { Share2 } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { shareStreakImage } from "@/lib/share-image";
+import { ShareStreakDialog } from "@/components/dashboard/share-streak-dialog";
 
 export function ShareStreakButton() {
-  const [busy, setBusy] = useState(false);
-
-  async function share() {
-    setBusy(true);
-    try {
-      await shareStreakImage();
-    } catch {
-      toast.error("No se pudo preparar la imagen. Intenta de nuevo.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const [open, setOpen] = useState(false);
 
   return (
-    <Button variant="ghost" size="sm" onClick={share} disabled={busy}>
-      <Share2 className="size-4" aria-hidden />
-      Compartir
-    </Button>
+    <>
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)}>
+        <Share2 className="size-4" aria-hidden />
+        Compartir
+      </Button>
+      <ShareStreakDialog open={open} onOpenChange={setOpen} />
+    </>
   );
 }
