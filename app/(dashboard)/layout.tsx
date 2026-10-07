@@ -3,6 +3,7 @@ import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
 import { isDemoUser } from "@/lib/demo";
 import { AchievementCelebration } from "@/components/dashboard/achievement-celebration";
+import { GmailReconnectBanner } from "@/components/dashboard/gmail-reconnect-banner";
 import { loadStreakContext } from "@/lib/streak-data";
 
 export default async function DashboardLayout({
@@ -35,11 +36,24 @@ export default async function DashboardLayout({
   // después de categorizar en Activity, no solo al volver al dashboard.
   const { achievements, pendingExpenses } = await loadStreakContext(user.id);
 
+  // Si la última sincronización se quedó sin acceso a Gmail, hay que decirlo en
+  // todas las páginas: con el cron corriendo solo, el usuario puede no apretar
+  // "Sincronizar" en días y no entender por qué no aparecen sus gastos.
+  const { data: lastSync } = await supabase
+    .from("sync_logs")
+    .select("error_code")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const lostGmailAccess = lastSync?.error_code === "gmail_auth";
+
   return (
     <div className="min-h-screen">
       <DashboardNav pendingExpenses={pendingExpenses} />
       <main className="overflow-x-clip px-5 pt-8 pb-24 md:pb-12 md:pl-[17rem]">
         <div className="mx-auto w-full max-w-5xl">
+          {lostGmailAccess && <GmailReconnectBanner />}
           {isDemoUser(user) && (
             <p className="mb-6 rounded-xl bg-[#0e7c58]/10 px-4 py-2.5 text-sm text-[#0e7c58]">
               Estás en la demo: gastos de ejemplo, sin Gmail. Tu sesión de prueba se borra en 24 horas.

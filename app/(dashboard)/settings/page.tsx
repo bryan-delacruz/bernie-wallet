@@ -10,6 +10,7 @@ import { WeekStartToggle } from "@/components/dashboard/week-start-toggle";
 import { InstallApp } from "@/components/dashboard/install-app";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { AccountData } from "@/components/dashboard/account-data";
+import { ReportProblem } from "@/components/dashboard/report-problem";
 import {
   ConnectedApps,
   type ConnectedApp,
@@ -112,6 +113,11 @@ export default async function SettingsPage() {
       <section className="space-y-3">
         <h2 className={SECTION_TITLE}>Instalar app</h2>
         <InstallApp />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className={SECTION_TITLE}>Ayuda</h2>
+        <ReportProblem />
       </section>
 
       <section className="space-y-3">
