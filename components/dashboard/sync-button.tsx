@@ -104,17 +104,17 @@ export function SyncButton({ className }: { className?: string }) {
           <DialogHeader>
             <DialogTitle>Reconecta tu cuenta de Gmail</DialogTitle>
             <DialogDescription>
-              Perdimos el acceso a tus correos, por eso no pudimos sincronizar. Cierra
-              sesión para volver a dar el permiso de lectura de correos (recuerda dejarlo
-              marcado). También puedes continuar sin reconectar y seguir agregando gastos
-              a mano.
+              Bernie se quedó sin acceso a tus correos, por eso no pudo sincronizar.
+              Para reconectarlo hay que volver a entrar con Google y dejar marcado el
+              permiso de lectura de correos. También puedes seguir sin reconectar y
+              anotar tus gastos a mano.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <DialogClose render={<Button variant="ghost" />}>Continuar</DialogClose>
+            <DialogClose render={<Button variant="ghost" />}>Ahora no</DialogClose>
             <Button onClick={signOut} disabled={signingOut}>
               <LogOut className="size-4" />
-              {signingOut ? "Cerrando sesión…" : "Cerrar sesión"}
+              {signingOut ? "Abriendo…" : "Reconectar Gmail"}
             </Button>
           </DialogFooter>
         </DialogContent>

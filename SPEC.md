@@ -341,6 +341,13 @@ asuntos ni remitentes (§14.4).
 En las corridas fallidas **el cursor no avanza**: se repite el `last_sync_at`
 anterior, para que la siguiente vuelva a mirar los mismos correos.
 
+Ese registro es también lo que hace visible el problema para el usuario: si la
+última corrida terminó en `gmail_auth`, el layout de `(dashboard)` muestra un aviso
+con un botón para reconectar. Antes eso solo aparecía al apretar "Sincronizar", y
+con el cron corriendo solo el usuario puede pasar días sin apretarlo: sus gastos
+dejan de aparecer y nada se lo explica. El botón dice **"Reconectar Gmail"**, no
+"Cerrar sesión": que por dentro haya que rehacer el login es mecánica interna.
+
 Deliberadamente **no se usa un servicio externo de monitoreo**. Cada tercero es un
 encargado de tratamiento más que declarar en la política de privacidad y ante la
 ANPD; con datos financieros, ese costo no se paga por un panel. Si algún día el
@@ -666,6 +673,12 @@ producto, y dónde vive:
   desconectar Gmail o borrar la cuenta.
 - La política de privacidad declara finalidad, base legal (consentimiento), plazo de
   conservación, transferencia internacional y el canal de reclamo ante la ANPD.
+
+**Canal de reporte.** Configuración → Ayuda abre un `mailto` al buzón de soporte.
+Es un `mailto` a propósito: un formulario propio guardaría texto libre —donde la
+gente pega lo que sea, incluido el correo del banco— y un servicio de terceros sería
+un encargado de tratamiento más que declarar. El cuerpo del correo pide
+explícitamente no copiar el contenido de los correos del banco.
 
 **Los logs no llevan contenido.** El sync registra conteos, nunca remitentes ni
 asuntos: un asunto del BCP incluye monto y comercio, y los logs viven en un tercero
