@@ -451,6 +451,40 @@ migraciones a ambos y se agregan scripts `db:push:dev` / `db:push:prod` por conn
 
 ---
 
+## 11.2 Respaldos
+
+El plan gratis de Supabase **no incluye backups**. Con datos de terceros eso es
+inaceptable: un borrado accidental sería definitivo.
+
+Un workflow de GitHub Actions (`.github/workflows/backup.yml`) corre cada noche a
+las 02:30 de Lima, después del último sync. Pide `POST /api/internal/backup`, cifra
+la respuesta con AES-256-CBC y guarda el resultado como artefacto (90 días).
+
+Tres decisiones:
+
+- **Corre en GitHub, no en la máquina del autor.** Un respaldo que depende de que
+  alguien se acuerde, o de que una laptop esté encendida, no es un respaldo.
+- **GitHub no recibe credenciales de la base.** El endpoint se autentica con el
+  secreto interno que ya usaban los otros crons. Si ese secreto se filtra, el daño
+  es leer; con una credencial de Postgres, sería escribir.
+- **Se cifra antes de salir de la máquina de CI**, así que el artefacto es un blob
+  que GitHub no puede leer. La passphrase vive solo en los secretos del repo.
+
+**Qué se respalda**: lo que el usuario no puede reconstruir — usuarios, bancos,
+medios de pago, categorías, subcategorías, retos y gastos. **Qué no**: los tokens de
+Google (son credenciales; tras restaurar, cada usuario reconecta) y las tablas
+operativas de sync, que se regeneran solas. Un respaldo que copia todo multiplica lo
+que hay que proteger.
+
+El workflow **falla si el respaldo no trae gastos**: un archivo vacío que nadie mira
+es peor que no tener respaldo, porque da falsa tranquilidad.
+
+**Lo que esto no da**: recuperación a un punto exacto en el tiempo. Con un respaldo
+nocturno, un error a media tarde cuesta las horas transcurridas. Es el precio
+aceptado de no pagar el plan Pro; se revisa cuando haya usuarios desconocidos.
+
+`scripts/restore-backup.md` documenta cómo descifrar y en qué orden restaurar.
+
 ## 12. Estructura del proyecto (objetivo, nombres en inglés)
 
 ```

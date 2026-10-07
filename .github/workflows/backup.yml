@@ -1,0 +1,52 @@
+# Respaldo nocturno de los datos de usuario (SPEC §11.2).
+#
+# Corre en los servidores de GitHub, así que no depende de que la máquina de nadie
+# esté encendida. El contenido se cifra ANTES de guardarse: el artefacto que queda
+# en GitHub es un blob que GitHub no puede leer.
+name: backup
+
+on:
+  schedule:
+    # 07:30 UTC = 02:30 en Lima. Después del último sync de la noche (21:50).
+    - cron: "30 7 * * *"
+  workflow_dispatch: # para poder probarlo a mano
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar los datos
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          INTERNAL_CRON_SECRET: ${{ secrets.INTERNAL_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            -X POST "$SITE_URL/api/internal/backup" \
+            -H "Authorization: Bearer $INTERNAL_CRON_SECRET" \
+            -o backup.json
+          # Comprobación mínima: que traiga gastos. Un respaldo vacío que nadie
+          # mira es peor que no tener respaldo, porque da falsa tranquilidad.
+          python3 -c "
+          import json, sys
+          d = json.load(open('backup.json'))
+          n = d['counts'].get('expenses', 0)
+          print('filas por tabla:', d['counts'])
+          sys.exit(0 if n > 0 else 'el respaldo no trae gastos')
+          "
+
+      - name: Cifrar
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt \
+            -in backup.json -out backup.json.enc -pass env:BACKUP_PASSPHRASE
+          rm backup.json
+
+      - name: Guardar
+        uses: actions/upload-artifact@v4
+        with:
+          name: bernie-backup-${{ github.run_id }}
+          path: backup.json.enc
+          retention-days: 90
