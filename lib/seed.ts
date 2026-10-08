@@ -47,3 +47,26 @@ export async function seedDefaultCategories(
     }
   }
 }
+
+/**
+ * Crea el medio de pago "Efectivo" si falta. Es universal —no tiene banco, número
+ * ni nada que configurar— y sin él, anotar un gasto pagado en efectivo obliga a
+ * elegir una tarjeta que no se usó.
+ */
+export async function seedCashPaymentMethod(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<void> {
+  const { count } = await supabase
+    .from("payment_methods")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("type", "cash");
+  if (count && count > 0) return;
+
+  await supabase.from("payment_methods").insert({
+    user_id: userId,
+    type: "cash",
+    alias: "Efectivo",
+  });
+}

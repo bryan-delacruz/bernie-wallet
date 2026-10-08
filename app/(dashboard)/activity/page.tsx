@@ -12,6 +12,7 @@ const TIPO_LABEL: Record<string, string> = {
   debit_card: "TD",
   yape: "Yape",
   account: "Cuenta",
+  cash: "Efectivo",
 };
 
 const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
@@ -145,7 +146,7 @@ export default async function ActivityPage({
 
   const paymentMethodOptions: PaymentMethodOption[] = (methods ?? []).map((m) => ({
     id: m.id,
-    label: m.alias ?? `${TIPO_LABEL[m.type] ?? m.type} ${m.identifier}`,
+    label: m.alias ?? `${TIPO_LABEL[m.type] ?? m.type} ${m.identifier ?? ""}`.trim(),
   }));
 
   // Filtros visibles si hay gastos o hay un filtro activo (no en cuenta vacía).

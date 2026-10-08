@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, CreditCard } from "lucide-react";
+import { Plus, Pencil, Trash2, CreditCard, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,9 +22,11 @@ import {
 export type BankOption = { id: string; name: string };
 export type PaymentMethod = {
   id: string;
-  user_bank_id: string;
+  /** El efectivo no cuelga de ningún banco. */
+  user_bank_id: string | null;
   type: string;
-  identifier: string;
+  /** El efectivo no tiene número. */
+  identifier: string | null;
   alias: string | null;
 };
 
@@ -33,6 +35,7 @@ const TIPO_LABEL: Record<string, string> = {
   debit_card: "TD",
   yape: "Yape",
   account: "Cuenta",
+  cash: "Efectivo",
 };
 
 const SELECT_CLASS =
@@ -68,20 +71,31 @@ export function PaymentMethodsSettings({
               className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0"
             >
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                <CreditCard className="size-4" />
+                {method.type === "cash" ? (
+                  <Banknote className="size-4" />
+                ) : (
+                  <CreditCard className="size-4" />
+                )}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
-                  {method.alias ?? `${TIPO_LABEL[method.type] ?? method.type} ${method.identifier}`}
+                  {method.alias ?? `${TIPO_LABEL[method.type] ?? method.type} ${method.identifier ?? ""}`}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {TIPO_LABEL[method.type] ?? method.type} · {bankName(method.user_bank_id)}
+                  {/* El efectivo no tiene banco del cual colgar. */}
+                  {method.type === "cash"
+                    ? "Para lo que pagas en efectivo"
+                    : `${TIPO_LABEL[method.type] ?? method.type} · ${bankName(method.user_bank_id ?? "")}`}
                 </p>
               </div>
-              <Button size="icon-sm" variant="ghost" onClick={() => openEdit(method)}>
-                <Pencil className="size-4" />
-              </Button>
-              <DeleteButton id={method.id} />
+              {method.type !== "cash" && (
+                <>
+                  <Button size="icon-sm" variant="ghost" onClick={() => openEdit(method)}>
+                    <Pencil className="size-4" />
+                  </Button>
+                  <DeleteButton id={method.id} />
+                </>
+              )}
             </li>
           ))}
         </ul>
@@ -191,7 +205,7 @@ function PaymentMethodForm({
             id="identifier"
             name="identifier"
             placeholder="****2813"
-            defaultValue={method?.identifier}
+            defaultValue={method?.identifier ?? ""}
             required
           />
         </div>
