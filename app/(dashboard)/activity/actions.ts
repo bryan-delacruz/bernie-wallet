@@ -126,3 +126,31 @@ export async function deleteExpense(id: string): Promise<ExpenseResult> {
   refresh();
   return {};
 }
+
+/**
+ * Descarta el aviso de ordenar pendientes y recuerda con cuántos se descartó
+ * (SPEC §18.6). El conteo se vuelve a leer acá y no se recibe del cliente: es el
+ * número contra el que después se mide si el backlog creció lo suficiente para
+ * volver a avisar.
+ */
+export async function dismissCategorizeHint(): Promise<ExpenseResult> {
+  const { supabase, userId } = await requireUser();
+
+  const { count } = await supabase
+    .from("expenses")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .is("subcategory_id", null);
+
+  const { error } = await supabase
+    .from("users")
+    .update({
+      categorize_hint_dismissed_at: new Date().toISOString(),
+      categorize_hint_pending_at: count ?? 0,
+    })
+    .eq("id", userId);
+  if (error) return { error: "No se pudo guardar la preferencia." };
+
+  revalidatePath("/activity");
+  return {};
+}

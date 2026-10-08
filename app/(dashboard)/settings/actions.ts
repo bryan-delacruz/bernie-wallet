@@ -241,3 +241,27 @@ export async function deleteAccount(): Promise<ActionResult> {
 
   redirect("/");
 }
+
+/** Prende o apaga el aviso de ordenar pendientes en Actividad (SPEC §18.6). */
+export async function updateCategorizeHint(enabled: boolean): Promise<ActionResult> {
+  const { supabase, userId } = await requireUser();
+
+  const { error } = await supabase
+    .from("users")
+    // Prenderlo de nuevo limpia el descarte: el usuario está pidiendo verlo.
+    .update(
+      enabled
+        ? {
+            categorize_hint_enabled: true,
+            categorize_hint_dismissed_at: null,
+            categorize_hint_pending_at: null,
+          }
+        : { categorize_hint_enabled: false },
+    )
+    .eq("id", userId);
+  if (error) return { error: "No se pudo guardar la preferencia." };
+
+  revalidatePath("/settings");
+  revalidatePath("/activity");
+  return {};
+}

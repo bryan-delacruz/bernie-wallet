@@ -7,6 +7,7 @@ import {
 } from "@/components/dashboard/payment-methods-settings";
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 import { WeekStartToggle } from "@/components/dashboard/week-start-toggle";
+import { CategorizeHintToggle } from "@/components/dashboard/categorize-hint-toggle";
 import { InstallApp } from "@/components/dashboard/install-app";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { AccountData } from "@/components/dashboard/account-data";
@@ -45,7 +46,11 @@ export default async function SettingsPage() {
       .select("id, user_bank_id, type, identifier, alias")
       .eq("user_id", user.id),
     isDemoUser(user) ? null : loadConnectedApps(supabase, user.id),
-    supabase.from("users").select("week_starts_on").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("users")
+      .select("week_starts_on, categorize_hint_enabled")
+      .eq("id", user.id)
+      .maybeSingle(),
   ]);
 
   const connectedIds = new Set((userBanks ?? []).map((b) => b.system_bank_id));
@@ -108,6 +113,11 @@ export default async function SettingsPage() {
       <section className="space-y-3">
         <h2 className={SECTION_TITLE}>La semana empieza el</h2>
         <WeekStartToggle value={profile?.week_starts_on === "sunday" ? "sunday" : "monday"} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className={SECTION_TITLE}>Avisarme de gastos sin categoría</h2>
+        <CategorizeHintToggle value={profile?.categorize_hint_enabled !== false} />
       </section>
 
       <section className="space-y-3">

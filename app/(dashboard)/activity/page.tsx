@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ReceiptText, SearchX, Wand2 } from "lucide-react";
+import { ReceiptText, SearchX } from "lucide-react";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { AddExpenseDialog } from "@/components/dashboard/add-expense-dialog";
 import { SyncButton } from "@/components/dashboard/sync-button";
@@ -7,6 +6,8 @@ import { ActivityFilters } from "@/components/dashboard/activity-filters";
 import { ExpenseList, type ExpenseRow } from "@/components/dashboard/expense-list";
 import type { CategoryOption, PaymentMethodOption } from "@/components/dashboard/expense-form";
 import { formatShortDate } from "@/lib/format";
+import { categorizeHint, BULK_THRESHOLD } from "@/lib/categorize/hint";
+import { CategorizeHint, CategorizeLink } from "@/components/dashboard/categorize-hint";
 
 const TIPO_LABEL: Record<string, string> = {
   credit_card: "TC",
@@ -15,11 +16,6 @@ const TIPO_LABEL: Record<string, string> = {
   account: "Cuenta",
   cash: "Efectivo",
 };
-
-/** Pendientes a partir de los cuales ofrecemos ordenar en lote. Por debajo, el
- *  lote no rinde: se editan más rápido uno a uno desde esta misma lista, y el
- *  aviso permanente se volvería mueble. */
-const BULK_THRESHOLD = 3;
 
 const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
 /** Pseudo-categoría para filtrar lo que todavía no tiene categoría. */
@@ -64,12 +60,24 @@ export default async function ActivityPage({
   const supabase = await createClient();
 
   // Datos de referencia (selects + join) + estado de sync. Pequeños y en paralelo.
-  const [{ data: subs }, { data: methods }, { data: cats }, { count: bankCount }, { data: lastSync }] =
+  const [
+    { data: subs },
+    { data: methods },
+    { data: cats },
+    { count: bankCount },
+    { data: profile },
+    { data: lastSync },
+  ] =
     await Promise.all([
       supabase.from("subcategories").select("id, name, category_id").eq("user_id", user.id),
       supabase.from("payment_methods").select("id, type, identifier, alias").eq("user_id", user.id),
       supabase.from("categories").select("id, name").eq("user_id", user.id).order("name"),
       supabase.from("user_banks").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase
+        .from("users")
+        .select("categorize_hint_enabled, categorize_hint_dismissed_at, categorize_hint_pending_at")
+        .eq("id", user.id)
+        .maybeSingle(),
       supabase
         .from("sync_logs")
         .select("created_at, last_sync_at")
@@ -87,6 +95,15 @@ export default async function ActivityPage({
     .eq("user_id", user.id)
     .is("subcategory_id", null);
   const hasBank = (bankCount ?? 0) > 0;
+
+  // Aviso de ordenar pendientes: se puede cerrar y vuelve cuando el backlog creció
+  // lo suficiente para tener algo nuevo que decir (SPEC §18.6).
+  const hint = categorizeHint({
+    pendingExpenses: pendingExpenses ?? 0,
+    enabled: profile?.categorize_hint_enabled !== false,
+    dismissedAt: profile?.categorize_hint_dismissed_at ?? null,
+    pendingAtDismiss: profile?.categorize_hint_pending_at ?? null,
+  });
 
   // Gastos con filtros server-side (funciona más allá del tope y URLs compartibles).
   let query = supabase
@@ -182,24 +199,11 @@ export default async function ActivityPage({
         {hasBank && <p className="text-xs text-muted-foreground">{syncStatus}</p>}
       </div>
 
-      {(pendingExpenses ?? 0) >= BULK_THRESHOLD && (
-        <Link
-          href="/categorize"
-          className="flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3.5 transition-colors hover:bg-primary/10"
-        >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Wand2 className="size-4" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium">
-              Ordena {pendingExpenses} gastos sin categoría
-            </span>
-            <span className="block text-xs text-muted-foreground">
-              Agrupados por comercio: una decisión categoriza todos sus gastos.
-            </span>
-          </span>
-        </Link>
-      )}
+      {hint.show ? (
+        <CategorizeHint pendingExpenses={hint.pendingExpenses} since={hint.since} />
+      ) : (pendingExpenses ?? 0) >= BULK_THRESHOLD ? (
+        <CategorizeLink pendingExpenses={pendingExpenses ?? 0} />
+      ) : null}
 
       {showFilters && (
         <ActivityFilters
