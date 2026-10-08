@@ -8,6 +8,11 @@ import {
 } from "@/lib/gmail/gmail-service";
 import { extractExpense, type NotificationType } from "@/lib/parser/parser-service";
 import { scheduleWebhookDelivery } from "@/lib/integrations/webhook-delivery";
+import {
+  MERCHANT_MEMORY_LIMIT,
+  normMerchant,
+  tallyMerchantMemory,
+} from "@/lib/categorize/merchant";
 
 // Ventana de la PRIMERA sincronización (cuando no hay cursor previo). Configurable
 // vía SYNC_INITIAL_DAYS para hacer backfill de correos antiguos. Default 30 días.
@@ -377,18 +382,10 @@ export async function runSync(
     });
 }
 
-// Tope de la memoria por comercio: solo los N gastos categorizados más recientes
-// (evita escanear un historial enorme; prioriza tus categorizaciones recientes).
-const MERCHANT_MEMORY_LIMIT = 2000;
-
-/** Normaliza el comercio para agrupar variantes del mismo (mayúsculas, espacios). */
-function normMerchant(m: string): string {
-  return m.trim().toUpperCase().replace(/\s+/g, " ");
-}
-
 /**
- * Memoria por comercio: aprende de tus gastos ya categorizados. Devuelve
- * `merchant normalizado → subcategoría más frecuente`. Una sola query, sin IA.
+ * Memoria por comercio: aprende de los gastos ya categorizados del usuario.
+ * El conteo vive en `lib/categorize/merchant.ts` (puro, compartido con
+ * `/categorize`); acá queda solo la query.
  */
 async function buildMerchantMemory(
   supabase: SupabaseClient,
@@ -402,28 +399,7 @@ async function buildMerchantMemory(
     .order("occurred_at", { ascending: false })
     .limit(MERCHANT_MEMORY_LIMIT);
 
-  const counts = new Map<string, Map<string, number>>();
-  for (const row of data ?? []) {
-    if (!row.subcategory_id || !row.merchant) continue;
-    const key = normMerchant(row.merchant);
-    const inner = counts.get(key) ?? new Map<string, number>();
-    inner.set(row.subcategory_id, (inner.get(row.subcategory_id) ?? 0) + 1);
-    counts.set(key, inner);
-  }
-
-  const memory = new Map<string, string>();
-  for (const [key, inner] of counts) {
-    let best = "";
-    let bestN = 0;
-    for (const [sub, n] of inner) {
-      if (n > bestN) {
-        bestN = n;
-        best = sub;
-      }
-    }
-    if (best) memory.set(key, best);
-  }
-  return memory;
+  return tallyMerchantMemory(data ?? []);
 }
 
 /** Subconjunto de `ids` que ya existe en `table` para el usuario, consultado en lotes. */
