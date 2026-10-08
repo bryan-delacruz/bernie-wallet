@@ -690,6 +690,9 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 12. **Páginas legales** (`/privacy`, `/terms`) — requisito para publicar la app
     OAuth de Google. Ver §14.
 13. **Apps conectadas** (Casorio Club vía OAuth 2.1) — ver §15. *(propuesta)*
+14. **Gamificación y logros compartibles** — ver §16.
+15. **Panel de administración** — ver §17.
+16. **Categorización en lote** (`/categorize`) — ver §18.
 
 ---
 
@@ -1314,3 +1317,89 @@ sincronía cuesta más de lo que protege.
 - **Mezclar operación y producto.** Uber Central muestra el riesgo: las excepciones
   de la herramienta interna terminan filtrándose a las reglas del producto. Acá el
   panel no escribe sobre datos de usuario — solo sobre tablas de sistema.
+
+---
+
+## 18. Categorización en lote (hito 16)
+
+### 18.1 El problema
+
+Un usuario con sync activo acumula gastos sin categoría más rápido de lo que los
+ordena: el banco manda correos todos los días y categorizar de a uno cuesta un
+diálogo por gasto. Con cientos pendientes, el backlog deja de ser una cola de trabajo
+y pasa a ser ruido permanente — y mientras siga ahí, el dashboard reporta "Otros
+gastos" y la racha (§16.3) nunca llega al 100%.
+
+El dato que lo hace tratable: **el backlog se repite**. Los mismos comercios
+aparecen decenas de veces. Ordenar por comercio y no por gasto reduce el trabajo de
+cientos de decisiones a unas pocas.
+
+### 18.2 La unidad de trabajo es el comercio, no el gasto
+
+`/categorize` agrupa los gastos sin categoría por **comercio normalizado** (misma
+normalización que la memoria del sync: `trim` + mayúsculas + espacios colapsados) y
+asigna la subcategoría elegida a **todos los gastos del grupo** en una sola acción.
+
+Cada grupo muestra el nombre del comercio, cuántos gastos tiene, el total acumulado
+y el rango de fechas. Los grupos van **ordenados por cantidad de gastos**: lo que más
+se repite es lo que más rinde ordenar primero.
+
+Asignar una subcategoría a un comercio tiene un segundo efecto, por la memoria del
+sync (§9): a partir de ahí **los gastos futuros de ese comercio entran ya
+categorizados**. Ordenar el backlog no es solo limpiar el pasado, es dejar de
+producirlo.
+
+### 18.3 Sugerencias (misma memoria del sync, sin IA)
+
+Si el usuario ya categorizó antes algún gasto de ese comercio, el grupo llega con la
+subcategoría **sugerida** y un control para aplicarla de un toque. La sugerencia sale
+de la misma memoria por comercio que usa el sync —la subcategoría más frecuente de
+ese comercio en los últimos `MERCHANT_MEMORY_LIMIT` gastos categorizados— así que la
+app no puede sugerir en `/categorize` algo distinto de lo que el sync asignaría.
+
+`Aplicar todas` ejecuta las sugerencias pendientes en un solo paso. Nunca se aplica
+nada sin que el usuario lo pida: la sugerencia se muestra, no se guarda sola.
+
+### 18.4 Reutilización: una sola definición de la memoria por comercio
+
+La memoria por comercio vivía dentro de `lib/sync/run-sync.ts`. Se extrae a
+`lib/categorize/merchant.ts` como **funciones puras sin IO**:
+
+- `normMerchant(m)` — la normalización, única en el proyecto.
+- `tallyMerchantMemory(rows)` — `merchant normalizado → subcategoría más frecuente`.
+- `groupUncategorized(rows)` — los grupos de la cola, ya ordenados.
+
+El IO queda afuera (`lib/categorize/queue.ts` para la página, la query propia del
+sync), así que las tres funciones se prueban sin base de datos y el sync y
+`/categorize` comparten una sola definición de "mismo comercio". Si la normalización
+cambia, cambia para los dos a la vez.
+
+### 18.5 Escalabilidad
+
+- La cola se lee **paginada** con `fetchAllRows()` (§"consultas de agregación"): el
+  backlog puede pasar las 1000 filas que la API corta en silencio.
+- La asignación en lote hace **un `UPDATE` por grupo**, no uno por gasto, troceado en
+  lotes de 200 ids para no armar URLs enormes.
+- Cada `UPDATE` lleva `user_id = <usuario>` además de la RLS: la RLS es la garantía,
+  el filtro explícito es la red.
+- La lista pinta los primeros `PAGE` grupos y crece con "Ver más": el trabajo útil
+  está en la cabecera de la lista, no en la cola larga.
+
+### 18.6 Dónde se entra, y cuándo
+
+`/categorize` **no está en el menú**. Se entra desde un aviso en Actividad que
+aparece solo cuando hay al menos `BULK_THRESHOLD` (3) gastos pendientes. Por debajo
+de ese número el lote no rinde —se editan más rápido uno a uno desde la propia
+lista— y un aviso permanente se volvería mueble. El menú ya lleva la insignia con
+el conteo (§16.4); un quinto ítem apretaría la barra inferior a 320px sin agregar
+información.
+
+La sugerencia **nunca se aplica sola**, ni acá ni en el sync. Una categorización que
+el usuario no pidió y no vio es difícil de detectar, y a partir de ahí el dashboard
+reporta mal sin que se sepa por qué.
+
+### 18.7 Privacidad
+
+La página no es compartible y no genera imagen. Es trabajo interno del usuario sobre
+sus propios datos, bajo la misma RLS que el resto (§7.3). No cuenta para la racha ni
+para los logros: §16.4 ya decide que el backlog se muestra pero no premia.

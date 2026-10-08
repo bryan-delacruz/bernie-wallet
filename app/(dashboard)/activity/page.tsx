@@ -1,4 +1,5 @@
-import { ReceiptText, SearchX } from "lucide-react";
+import Link from "next/link";
+import { ReceiptText, SearchX, Wand2 } from "lucide-react";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { AddExpenseDialog } from "@/components/dashboard/add-expense-dialog";
 import { SyncButton } from "@/components/dashboard/sync-button";
@@ -14,6 +15,11 @@ const TIPO_LABEL: Record<string, string> = {
   account: "Cuenta",
   cash: "Efectivo",
 };
+
+/** Pendientes a partir de los cuales ofrecemos ordenar en lote. Por debajo, el
+ *  lote no rinde: se editan más rápido uno a uno desde esta misma lista, y el
+ *  aviso permanente se volvería mueble. */
+const BULK_THRESHOLD = 3;
 
 const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
 /** Pseudo-categoría para filtrar lo que todavía no tiene categoría. */
@@ -175,6 +181,25 @@ export default async function ActivityPage({
         </div>
         {hasBank && <p className="text-xs text-muted-foreground">{syncStatus}</p>}
       </div>
+
+      {(pendingExpenses ?? 0) >= BULK_THRESHOLD && (
+        <Link
+          href="/categorize"
+          className="flex items-center gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3.5 transition-colors hover:bg-primary/10"
+        >
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Wand2 className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium">
+              Ordena {pendingExpenses} gastos sin categoría
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              Agrupados por comercio: una decisión categoriza todos sus gastos.
+            </span>
+          </span>
+        </Link>
+      )}
 
       {showFilters && (
         <ActivityFilters
