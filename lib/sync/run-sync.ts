@@ -70,12 +70,8 @@ const TIPO_LABEL: Record<string, string> = {
   account: "Cuenta",
 };
 
-/**
- * Modo descubrimiento (SPEC §9.3). Apagado por defecto: cuesta cuota de Gmail y
- * solo sirve mientras se mapea un banco nuevo.
- */
-const DISCOVERY = process.env.SYNC_DISCOVERY === "1";
-/** Correos a inspeccionar por corrida. Cada uno cuesta una lectura a Gmail. */
+/** Correos a inspeccionar por corrida en modo descubrimiento. Cada uno cuesta una
+ *  lectura a Gmail. */
 const DISCOVERY_LIMIT = 10;
 
 const SOURCE_TYPES = new Set<PaymentType>(["credit_card", "debit_card", "yape", "account"]);
@@ -127,6 +123,15 @@ export async function runSync(
     const bankIds = userBanks.map((b) => b.system_bank_id);
 
     // Remitentes a vigilar según los bancos conectados.
+    // El descubrimiento se enciende por banco desde el panel (SPEC §17.6), no por
+    // variable de entorno: así se gasta cuota solo donde hay algo que mapear.
+    const { data: discoveringBanks } = await supabase
+      .from("system_banks")
+      .select("id")
+      .in("id", bankIds)
+      .eq("discovering", true);
+    const discovery = (discoveringBanks ?? []).length > 0;
+
     const { data: sendersData } = await supabase
       .from("system_senders")
       .select("sender, subject_pattern, notification_type, system_bank_id")
@@ -171,7 +176,7 @@ export async function runSync(
     // `sync_discoveries`, protegido por RLS.
     console.log(`[sync] user=${userId} estrictos=${allIds.length}`);
 
-    if (DISCOVERY) {
+    if (discovery) {
       await discoverUnknownSubjects(supabase, userId, accessToken, {
         senders: uniqueSenders,
         afterSeconds,
