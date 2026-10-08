@@ -10,7 +10,8 @@ export type NotificationType =
   | "debit_card_purchase"
   | "service_payment"
   | "yape"
-  | "transfer";
+  | "transfer"
+  | "plin";
 
 export type ParsedExpense = {
   amount: number;
@@ -222,7 +223,48 @@ export function extractExpense(
       return parseYape(t);
     case "transfer":
       return parseTransfer(t);
+    case "plin":
+      return parsePlin(t);
     default:
       return null;
   }
+}
+
+/**
+ * Plin de Interbank ("Constancia de Pago Plin").
+ *
+ * A diferencia del Yape de BCP, que sale de la billetera, el Plin se descuenta
+ * **directo de la cuenta** ("Cuenta cargo"): por eso el medio de pago es una cuenta
+ * y el identificador son los últimos dígitos de esa cuenta, no de un celular.
+ *
+ * El cuerpo llega como HTML aplanado, así que los valores quedan pegados a sus
+ * etiquetas en una sola línea.
+ */
+function parsePlin(text: string): ParsedExpense | null {
+  const amountMatch = text.match(new RegExp(`Monto y moneda\\s*${MONEY}`, "i"));
+  if (!amountMatch) return null;
+  const amount = parseAmount(amountMatch[2]);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  // El destinatario llega entre "Destinatario" y "Destino"; sin él no hay a quién
+  // atribuir el gasto, así que es motivo de descarte.
+  const merchant = text.match(/Destinatario\s+([\s\S]+?)\s+Destino\b/i)?.[1]?.trim() ?? "";
+  if (!merchant) return null;
+
+  // "Cuenta cargo Ahorro Sueldo Soles 164 3516533252" → los últimos 4 del número.
+  const account = text.match(/Cuenta cargo\s+[\s\S]*?([\d\s]{8,})\s+Destinatario/i)?.[1] ?? "";
+  const accountDigits = account.replace(/\D/g, "");
+  const identifier = accountDigits ? accountDigits.slice(-4) : "";
+
+  const operation = text.match(/C[óo]digo de operaci[óo]n\s+(\d+)/i)?.[1] ?? "";
+
+  return {
+    amount,
+    currency: toCurrency(amountMatch[1]),
+    merchant,
+    payment_method_identifier: identifier,
+    payment_source_type: "account",
+    operation_number: operation,
+    document_number: "",
+  };
 }
