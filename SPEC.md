@@ -333,11 +333,13 @@ Mapear un banco nuevo exige conocer la redacción exacta de sus correos. Pedirle
 usuario que reenvíe ejemplos es lento y depende de que él se acuerde justo cuando
 compra algo.
 
-Con `SYNC_DISCOVERY=1`, cada corrida busca también los correos del remitente **sin
-filtrar por asunto** y anota en `sync_discoveries` los que no reconoce: remitente,
-asunto y el motivo. Así la app descubre sola qué plantillas le llegan.
+Cuando un banco tiene `system_banks.discovering = true` —se enciende desde el panel
+(§17.6)— cada corrida busca también los correos de ese remitente **sin filtrar por
+asunto** y anota en `sync_discoveries` los que no reconoce: remitente, asunto y el
+motivo. Así la app descubre sola qué plantillas le llegan.
 
-- **Apagado por defecto**: cuesta cuota de Gmail y solo sirve mientras se mapea.
+- **Apagado por defecto, y por banco**: cuesta cuota de Gmail y solo sirve mientras
+  se mapea. Quien use solo bancos ya mapeados no paga nada.
 - **Tope de 10 correos por corrida**, y nunca relee los ya anotados.
 - **No toca el cursor ni la cola de gastos**: es solo observación. Si falla, la
   sincronización sigue.

@@ -243,6 +243,53 @@ await test("borrar la cuenta arrastra todo lo del usuario", async () => {
   }
 });
 
+await test("panel admin: un usuario normal no obtiene nada", async () => {
+  // Una prueba anterior borra al usuario A en cascada: se recrea para esta tanda.
+  await db.exec(`
+    insert into auth.users (id) values ('${A}') on conflict do nothing;
+    insert into users (id, email) values ('${A}', 'a@x.com') on conflict do nothing;
+  `);
+  // La protección vive en las funciones, no en el guard de la página: aunque
+  // alguien llame directo al RPC, sin is_admin no sale una sola fila.
+  await as(user(A), async (tx) => {
+    for (const fn of ["admin_sync_health", "admin_unmapped_subjects", "admin_usage"]) {
+      const r = await rows(tx, `select * from ${fn}()`);
+      assert.equal(r.length, 0, `${fn} devolvió datos a un usuario sin is_admin`);
+    }
+    assert.equal((await rows(tx, "select public.is_admin() as ok"))[0].ok, false);
+  });
+});
+
+await test("panel admin: con is_admin cuenta, pero sigue sin poder leer gastos ajenos", async () => {
+  // Un gasto de OTRO usuario: lo que el admin debe poder contar, no leer.
+  await db.exec(`
+    insert into expenses (user_id, amount, merchant, occurred_at, source)
+    values ('${B}', 12.00, 'Tienda', now(), 'manual')
+  `);
+  await db.exec(`update users set is_admin = true where id = '${A}'`);
+  await as(user(A), async (tx) => {
+    const usage = await rows(tx, "select * from admin_usage()");
+    assert.equal(usage.length, 1);
+    assert.ok(Number(usage[0].expenses_total) >= 1, "cuenta los gastos de todos");
+
+    // Lo que NO puede: ver las filas de otro usuario. RLS sigue aplicando sobre
+    // las tablas; ser admin no abre una puerta a los datos.
+    const ajenos = await rows(tx, `select * from expenses where user_id = '${B}'`);
+    assert.equal(ajenos.length, 0, "un admin pudo leer gastos de otro usuario");
+  });
+  await db.exec(`update users set is_admin = false where id = '${A}'`);
+});
+
+await test("panel admin: la auditoría no la lee cualquiera", async () => {
+  await db.exec(`insert into admin_audit (admin_id, action) values ('${A}', 'toggle_discovery')`);
+  await as(user(B), async (tx) => {
+    assert.equal((await rows(tx, "select * from admin_audit")).length, 0);
+  });
+  // Se devuelve el estado como lo dejó la prueba de borrado en cascada: la
+  // siguiente tanda vuelve a crear al usuario A desde cero.
+  await db.exec(`delete from auth.users where id = '${A}'`);
+});
+
 await test("cola de webhooks: reclamar, lease, completar y backoff", async () => {
   await db.exec(`delete from integration_events; insert into auth.users (id) values ('${A}'); insert into users (id, email) values ('${A}', 'a@x.com')`);
   await db.exec(`insert into integration_clients (client_id, name, webhook_url, webhook_secret) values ('wh', 'WH', 'https://wh.test', 'enc') on conflict do nothing`);
