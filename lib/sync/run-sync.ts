@@ -60,6 +60,7 @@ const TIPO_BY_TYPE: Record<NotificationType, PaymentType | null> = {
   service_payment: "account", // sale de una cuenta de origen, no de una tarjeta
   yape: "yape",
   transfer: null, // una transferencia no tiene tarjeta → sin medio de pago
+  plin: "account", // el Plin de Interbank se descuenta directo de la cuenta
 };
 
 const TIPO_LABEL: Record<string, string> = {
@@ -68,6 +69,14 @@ const TIPO_LABEL: Record<string, string> = {
   yape: "Yape",
   account: "Cuenta",
 };
+
+/**
+ * Modo descubrimiento (SPEC §9.3). Apagado por defecto: cuesta cuota de Gmail y
+ * solo sirve mientras se mapea un banco nuevo.
+ */
+const DISCOVERY = process.env.SYNC_DISCOVERY === "1";
+/** Correos a inspeccionar por corrida. Cada uno cuesta una lectura a Gmail. */
+const DISCOVERY_LIMIT = 10;
 
 const SOURCE_TYPES = new Set<PaymentType>(["credit_card", "debit_card", "yape", "account"]);
 
@@ -161,11 +170,13 @@ export async function runSync(
     // Lo que el usuario necesite ver de sus propios correos vive en
     // `sync_discoveries`, protegido por RLS.
     console.log(`[sync] user=${userId} estrictos=${allIds.length}`);
-    if (allIds.length === 0) {
-      const wideQuery = `from:(${uniqueSenders.join(" OR ")}) after:${afterSeconds}`;
-      const wideIds = await searchMessages(accessToken, wideQuery);
-      // Distingue "no matchea el asunto" de "no hay correos", sin decir cuáles.
-      console.log(`[sync][diag] user=${userId} soloRemitente=${wideIds.length}`);
+
+    if (DISCOVERY) {
+      await discoverUnknownSubjects(supabase, userId, accessToken, {
+        senders: uniqueSenders,
+        afterSeconds,
+        matched: allIds,
+      });
     }
 
     // Anti-duplicados (expenses) + dead-letter (sync_failures). En lotes para no
@@ -413,7 +424,7 @@ async function buildMerchantMemory(
 /** Subconjunto de `ids` que ya existe en `table` para el usuario, consultado en lotes. */
 async function collectExistingIds(
   supabase: SupabaseClient,
-  table: "expenses" | "sync_failures",
+  table: "expenses" | "sync_failures" | "sync_discoveries",
   userId: string,
   ids: string[],
 ): Promise<Set<string>> {
@@ -495,4 +506,58 @@ export async function recordSyncError(
     source,
     error_code: errorCode,
   });
+}
+
+/**
+ * Anota los correos de un remitente conocido cuyo **asunto** no reconocemos.
+ *
+ * Es la herramienta para mapear un banco nuevo: en vez de pedirle al usuario que
+ * reenvíe ejemplos, la app descubre sola qué plantillas le llegan. Lo guardado
+ * —remitente y asunto— es dato personal, así que vive en `sync_discoveries` bajo
+ * RLS y nunca en los logs (§14.4).
+ *
+ * No toca el cursor ni la cola de gastos: es solo observación.
+ */
+async function discoverUnknownSubjects(
+  supabase: SupabaseClient,
+  userId: string,
+  accessToken: string,
+  { senders, afterSeconds, matched }: { senders: string[]; afterSeconds: number; matched: string[] },
+): Promise<void> {
+  try {
+    const wideIds = await searchMessages(
+      accessToken,
+      `from:(${senders.join(" OR ")}) after:${afterSeconds}`,
+    );
+    const matchedSet = new Set(matched);
+    const candidates = wideIds.filter((id) => !matchedSet.has(id));
+    if (candidates.length === 0) return;
+
+    // Los ya anotados no se vuelven a leer: la gracia es descubrir plantillas
+    // nuevas, no gastar cuota releyendo las mismas.
+    const seen = await collectExistingIds(supabase, "sync_discoveries", userId, candidates);
+    const fresh = candidates.filter((id) => !seen.has(id)).slice(0, DISCOVERY_LIMIT);
+    if (fresh.length === 0) return;
+
+    const rows = [];
+    for (const id of fresh) {
+      const message = await getMessage(accessToken, id).catch(() => null);
+      if (!message) continue;
+      rows.push({
+        user_id: userId,
+        message_id: id,
+        sender: message.from,
+        subject: message.subject,
+        verdict: "expense_candidate",
+        reason: "asunto no registrado en system_senders",
+        updated_at: new Date().toISOString(),
+      });
+    }
+    if (rows.length > 0) {
+      await supabase.from("sync_discoveries").upsert(rows, { onConflict: "user_id,message_id" });
+    }
+    console.log(`[sync][discovery] user=${userId} nuevos=${rows.length}`);
+  } catch {
+    // Descubrir es un extra: si falla, la sincronización sigue su curso.
+  }
 }

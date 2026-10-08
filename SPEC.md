@@ -12,7 +12,7 @@ Bernie Wallet es una app web de **registro de gastos personales**. Lee correos d
 
 - **Solo gastos (expenses)**: ver y registrar gastos. (Medios de pago avanzados, plan "pro", reportes, etc. quedan para más adelante.)
 - **Registro manual SIEMPRE disponible**: cualquier usuario puede registrar gastos a mano. No es un "modo" que se elige.
-- **Solo banco BCP** como origen de correos. (Interbank y otros: futuro.)
+- **BCP e Interbank** como origen de correos. (Otros bancos: futuro.)
 - **Onboarding (primer login)**: se pregunta **con qué banco(s) trabaja** el usuario. Esto NO activa/desactiva un modo — solo le dice a la app **qué correos revisar** (por remitente, `system_senders`) y **cómo clasificarlos** (por asunto, `subject_pattern` → `notification_type`) durante la sincronización.
   - Selecciona **BCP** → al sincronizar, la app revisa los remitentes de BCP y clasifica los correos por su asunto.
   - No selecciona ningún banco → no hay correos que revisar (la sync no trae nada), pero el registro manual sigue disponible.
@@ -327,6 +327,23 @@ millones de unidades, ~505 por sincronización completa) no es el límite real; 
 límite es el de 250 unidades por segundo y por usuario, que el pipeline no toca
 porque lee los correos de a uno.
 
+## 9.3 Modo descubrimiento
+
+Mapear un banco nuevo exige conocer la redacción exacta de sus correos. Pedirle al
+usuario que reenvíe ejemplos es lento y depende de que él se acuerde justo cuando
+compra algo.
+
+Con `SYNC_DISCOVERY=1`, cada corrida busca también los correos del remitente **sin
+filtrar por asunto** y anota en `sync_discoveries` los que no reconoce: remitente,
+asunto y el motivo. Así la app descubre sola qué plantillas le llegan.
+
+- **Apagado por defecto**: cuesta cuota de Gmail y solo sirve mientras se mapea.
+- **Tope de 10 correos por corrida**, y nunca relee los ya anotados.
+- **No toca el cursor ni la cola de gastos**: es solo observación. Si falla, la
+  sincronización sigue.
+- Lo anotado —remitente y asunto— es dato personal: vive bajo RLS y **nunca** en los
+  logs, que solo llevan el conteo (§14.4).
+
 ## 9.2 Visibilidad de las sincronizaciones
 
 Un usuario al que le falla el sync era **invisible**: él veía gastos que no
@@ -402,6 +419,35 @@ correo. Es gratis, instantáneo y determinístico; **no usa ninguna API de IA**.
 - **`yape`**: monto ("Monto de yapeo"), nombre del beneficiario ("Nombre del Beneficiario"), número de operación. `payment_method_identifier` = **solo** el celular de "Tu número de celular" (últimos 3 dígitos); **nunca** el del beneficiario, para no crear medios fantasma. Vacío si no aparece esa etiqueta.
 - **`service_payment`**: monto ("Monto total"), empresa ("Empresa"), número de operación, documento ("Doc. pago"). La "Cuenta de origen" define `payment_source_type` (crédito/débito/cuenta) y sus últimos 4 dígitos.
 - **`transfer`**: monto ("Monto transferido"), beneficiario ("Enviado a"), últimos 4 de la cuenta de origen ("Desde …"), número de operación. `payment_source_type` = `account`.
+
+### 10.1.1 Interbank
+
+Remitente único para todo: `servicioalcliente@netinterbank.com.pe`.
+
+| Asunto | Tipo | Se registra |
+|---|---|---|
+| `Constancia de Pago Plin` | `plin` | Sí |
+| `Constancia de pago` | — | **No** |
+| `Constancia de transferencia` | — | **No** |
+| Compra con TC / TD | — | Pendiente de plantilla |
+
+**Por qué se ignoran dos.** "Constancia de pago" es el pago de la propia tarjeta de
+crédito desde una cuenta: registrarlo contaría doble, porque las compras de esa
+tarjeta ya entraron una a una. "Constancia de transferencia", en la muestra que
+tenemos, va de una cuenta propia a otra cuenta propia: no sale plata del patrimonio.
+Falta una muestra de transferencia **a un tercero** para poder distinguirlas; hasta
+entonces no se toca, porque confundirlas inflaría los totales justo en los montos
+más grandes.
+
+Ignorar se implementa **no registrando el asunto**: la query de Gmail filtra por
+asunto, así que esos correos ni se descargan.
+
+**El Plin sale de la cuenta, no de una billetera** ("Cuenta cargo"), a diferencia
+del Yape de BCP. Por eso su medio de pago es de tipo `account` y el identificador
+son los últimos 4 dígitos de esa cuenta. No hizo falta tocar el esquema.
+
+El cuerpo llega **solo como HTML**, que el parser recibe aplanado: los valores
+quedan pegados a sus etiquetas en una sola línea ("Monto y moneda S/ 100.00").
 
 ### 10.2 Tests (`lib/parser/parser-service.test.ts`)
 

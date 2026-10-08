@@ -131,3 +131,42 @@ test("monto: puntuación final no rompe el parseo", () => {
   );
   assert.equal(extractExpense(trailing, "credit_card_purchase")?.amount, 23.5);
 });
+
+// --- Interbank: Plin ---------------------------------------------------------
+// Réplica de la plantilla real de Interbank con valores FICTICIOS. El cuerpo llega
+// como HTML aplanado: una sola línea con los valores pegados a sus etiquetas.
+const PLIN = `Interbank | Constancia de Pago Plin Hola, MARIA , te enviamos tu
+Constancia de Pago Plin Te enviamos el detalle de tu operación Código de operación
+12345678 Fecha y hora 07 Oct 2026 03:52 PM Cuenta cargo Ahorro Sueldo Soles 164
+1234567890 Destinatario JUAN PEREZ Destino Plin Monto y moneda S/ 100.00 Realiza
+más operaciones como esta de manera rápida y simple desde Interbank APP`;
+
+test("plin: monto, destinatario, cuenta de cargo y operación", () => {
+  const parsed = extractExpense(PLIN, "plin");
+  assert.equal(parsed?.amount, 100);
+  assert.equal(parsed?.currency, "PEN");
+  assert.equal(parsed?.merchant, "JUAN PEREZ");
+  // El Plin sale de la cuenta, no de una billetera: el medio es la cuenta.
+  assert.equal(parsed?.payment_source_type, "account");
+  assert.equal(parsed?.payment_method_identifier, "7890");
+  assert.equal(parsed?.operation_number, "12345678");
+});
+
+test("plin: en dólares", () => {
+  const parsed = extractExpense(PLIN.replace("S/ 100.00", "US$ 25.50"), "plin");
+  assert.equal(parsed?.amount, 25.5);
+  assert.equal(parsed?.currency, "USD");
+});
+
+test("plin: sin destinatario no se registra", () => {
+  const sinDestinatario = PLIN.replace("Destinatario JUAN PEREZ Destino", "Destino");
+  assert.equal(extractExpense(sinDestinatario, "plin"), null);
+});
+
+test("plin: otra plantilla del mismo banco no se parsea como plin", () => {
+  // "Constancia de transferencia" no lleva "Monto y moneda" sino "Moneda y monto".
+  const transferencia = `Interbank | Constancia de transferencia Código de operación
+    99 Cuenta cargo Cuenta Simple Soles 084 1111222233 Cuenta destino Ahorro Sueldo
+    Soles 1234567890 Moneda y monto S/ 16.00`;
+  assert.equal(extractExpense(transferencia, "plin"), null);
+});
