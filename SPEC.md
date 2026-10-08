@@ -1401,18 +1401,37 @@ cambia, cambia para los dos a la vez.
 - La lista pinta los primeros `PAGE` grupos y crece con "Ver más": el trabajo útil
   está en la cabecera de la lista, no en la cola larga.
 
-### 18.6 Dónde se entra, y cuándo
+### 18.6 Dónde se entra, y cuándo deja de insistir
 
-`/categorize` **no está en el menú**. Se entra desde un aviso en Actividad que
-aparece solo cuando hay al menos `BULK_THRESHOLD` (3) gastos pendientes. Por debajo
-de ese número el lote no rinde —se editan más rápido uno a uno desde la propia
-lista— y un aviso permanente se volvería mueble. El menú ya lleva la insignia con
-el conteo (§16.4); un quinto ítem apretaría la barra inferior a 320px sin agregar
-información.
+`/categorize` **no está en el menú**. Se entra desde Actividad, con un aviso que
+aparece a partir de `BULK_THRESHOLD` (3) pendientes. Por debajo de ese número el lote
+no rinde —se editan más rápido uno a uno desde la propia lista— y el menú ya lleva la
+insignia con el conteo (§16.4): un quinto ítem apretaría la barra inferior a 320px sin
+agregar información.
 
-La sugerencia **nunca se aplica sola**, ni acá ni en el sync. Una categorización que
-el usuario no pidió y no vio es difícil de detectar, y a partir de ahí el dashboard
-reporta mal sin que se sepa por qué.
+**El problema del aviso permanente.** Es permanente justo para quien más lo necesita:
+con cientos de pendientes se ve todos los días y en una semana deja de verse. Por eso
+se puede cerrar, y el cierre se recuerda en `users` (migración `0019`) y no en el
+navegador — "no me molestes" es una preferencia de la persona, no del dispositivo
+donde la expresó.
+
+**Cuándo vuelve.** No por reloj. Al cerrar se guarda *cuántos* pendientes había, y el
+aviso vuelve cuando se acumularon `HINT_REGROWTH` (20) nuevos: recién ahí tiene una
+noticia que dar, y la da —"se juntaron 20 gastos más sin categoría"— en vez de repetir
+lo mismo. Un aviso que reaparece sin novedad es la misma molestia que el usuario ya
+rechazó una vez. Hay un tope de `HINT_MAX_DAYS` (90) por si alguien cierra y no vuelve
+a juntar lo suficiente. Un backlog que *bajó* desde el cierre nunca reaparece: el
+usuario está ordenando.
+
+**La puerta no desaparece, baja de volumen.** Cerrado el aviso, en su lugar queda un
+enlace de una línea con el conteo. Al cerrar, un toast lo dice. No hay modal: quien
+cierra una interrupción no merece otra más grande para explicarle la primera.
+
+**Apagarlo del todo.** Configuración → "Avisarme de gastos sin categoría". Volver a
+prenderlo limpia el cierre, porque prenderlo *es* pedir verlo. Apagado, el enlace de
+una línea sigue ahí.
+
+La decisión vive en `categorizeHint()` (`lib/categorize/hint.ts`), pura y con tests.
 
 ### 18.7 Privacidad
 
