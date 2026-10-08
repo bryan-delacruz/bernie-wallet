@@ -29,9 +29,40 @@ const PATRONES: [string, string, Medio, number, number, number][] = [
   ["Metropolitano", "Transporte público", "yape", 3, 6, 6],
   ["Repsol", "Combustible", "td", 90, 150, 1],
   ["Los Portales Estacionamientos", "Estacionamiento", "yape", 6, 15, 2],
-  ["Inkafarma", "Salud", "td", 18, 95, 1],
-  ["Cineplanet", "Entretenimiento", "tc", 24, 60, 1],
+  ["Inkafarma", "Farmacia", "td", 18, 95, 1],
+  ["Cineplanet", "Cine", "tc", 24, 60, 1],
   ["Juan P. (Yape)", "Persona a persona", "yape", 20, 120, 2],
+];
+
+/**
+ * Backlog de la demo: comercios que quedan **sin categorizar en los meses viejos**
+ * y categorizados en el mes en curso (SPEC §18).
+ *
+ * Que el mes en curso esté limpio no es un detalle: un gasto sin categoría rompe
+ * su día en la racha (§16.3), así que el backlog va atrás. La racha abre sana y
+ * los huecos quedan en el pasado — justo lo que le pasa a quien dejó de ordenar
+ * un tiempo y después retomó.
+ *
+ * Con historial reciente y unánime, estos comercios llegan a /categorize con
+ * sugerencia firme y botón de un toque.
+ */
+const BACKLOG = new Set(["Rappi", "Uber"]);
+
+/** Un comercio con **un solo** antecedente: la memoria no decide con eso (§18.3). */
+const UN_SOLO_ANTECEDENTE = "Inkafarma";
+
+/**
+ * La persona del caso difícil: el mismo Yape fue plata prestada, una cena y la
+ * cuota del depa. Su historial se contradice, así que la memoria se calla y el
+ * grupo se marca "varía". Es el caso que justifica las reglas por comercio (§18.8).
+ */
+const AMBIGUO = "Juan P. (Yape)";
+const AMBIGUO_SUBS = ["Persona a persona", "Restaurantes", "Supermercado"];
+
+/** Compras sueltas y viejas, sin ningún antecedente: no hay nada que sugerir. */
+const SIN_HISTORIAL: [string, Medio, number, number][] = [
+  ["Veterinaria Pet Center", "td", 145.0, 52],
+  ["Sodimac", "tc", 89.9, 71],
 ];
 
 /** Servicios del mes: día fijo y monto parecido cada mes. */
@@ -98,9 +129,10 @@ export async function seedDemo(supabase: SupabaseClient, userId: string) {
   const hoy = Date.now();
   const DIA = 86_400_000;
   const gastos: Record<string, unknown>[] = [];
+  // `sub` en null deja el gasto sin categoría: así se siembra el backlog.
   const agregar = (
     comercio: string,
-    sub: string,
+    sub: string | null,
     m: Medio,
     monto: number,
     fecha: Date,
@@ -115,18 +147,30 @@ export async function seedDemo(supabase: SupabaseClient, userId: string) {
       amount: monto.toFixed(2),
       currency: moneda,
       occurred_at: fecha.toISOString(),
-      subcategory_id: subId.get(sub) ?? null,
+      subcategory_id: sub ? (subId.get(sub) ?? null) : null,
       payment_method_id: medio[m],
       source: "sync",
     });
   };
 
-  // Tres meses hacia atrás desde hoy.
+  // Tres meses hacia atrás desde hoy. El mes 0 es el en curso.
+  let ambiguoN = 0;
   for (let mes = 0; mes < 3; mes++) {
+    const viejo = mes > 0;
     for (const [comercio, sub, m, min, max, veces] of PATRONES) {
       for (let i = 0; i < veces; i++) {
         const dias = mes * 30 + Math.floor(azar() * 30);
-        agregar(comercio, sub, m, min + azar() * (max - min), new Date(hoy - dias * DIA));
+        let categoria: string | null = sub;
+        if (viejo && (BACKLOG.has(comercio) || comercio === UN_SOLO_ANTECEDENTE)) {
+          categoria = null;
+        } else if (viejo && comercio === AMBIGUO) {
+          categoria = null;
+        } else if (!viejo && comercio === AMBIGUO) {
+          // En el mes en curso sí quedan categorizados, pero cada uno distinto:
+          // de ahí sale el historial que se contradice.
+          categoria = AMBIGUO_SUBS[ambiguoN++ % AMBIGUO_SUBS.length];
+        }
+        agregar(comercio, categoria, m, min + azar() * (max - min), new Date(hoy - dias * DIA));
       }
     }
     for (const [comercio, sub, m, dia, monto] of SERVICIOS) {
@@ -135,8 +179,12 @@ export async function seedDemo(supabase: SupabaseClient, userId: string) {
       agregar(comercio, sub, m, monto * (0.92 + azar() * 0.16), f);
     }
   }
+  for (const [comercio, m, monto, dias] of SIN_HISTORIAL) {
+    agregar(comercio, null, m, monto, new Date(hoy - dias * DIA));
+  }
+
   // Una suscripción en dólares y un gasto anotado a mano.
-  agregar("Spotify", "Entretenimiento", "tc", 5.99, new Date(hoy - 4 * DIA), "USD");
+  agregar("Spotify", "Streaming", "tc", 5.99, new Date(hoy - 4 * DIA), "USD");
   gastos.push({
     user_id: userId,
     merchant: "Mercado de Surquillo",

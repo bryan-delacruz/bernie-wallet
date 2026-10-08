@@ -18,7 +18,8 @@ import {
   setMerchantMuted,
 } from "@/app/(dashboard)/categorize/actions";
 import { formatCurrency, formatShortDate } from "@/lib/format";
-import type { PendingExpense, Suggestion } from "@/lib/categorize/merchant";
+import { cn } from "@/lib/utils";
+import { MIN_GROUP_SIZE, type PendingExpense, type Suggestion } from "@/lib/categorize/merchant";
 import type { Taxonomy } from "@/lib/taxonomy";
 
 /** Grupos visibles al entrar, y cuántos agrega cada "Ver más". El trabajo útil
@@ -58,18 +59,25 @@ export function CategorizeQueue({
   withoutMerchant: number;
 }) {
   const router = useRouter();
+  // Arranca por los comercios que más se repiten: ahí está casi todo el ahorro.
+  const [onlyRepeated, setOnlyRepeated] = useState(true);
   const [visible, setVisible] = useState(PAGE);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [applyingAll, startApplyAll] = useTransition();
 
+  const shown = useMemo(
+    () => (onlyRepeated ? groups.filter((g) => g.count >= MIN_GROUP_SIZE) : groups),
+    [groups, onlyRepeated],
+  );
+
   const suggested = useMemo(
     () =>
-      groups.filter((g) => {
+      shown.filter((g) => {
         const id = actionableSubcategory(g.suggestion);
         return id !== null && subcategoryLabels[id];
       }),
-    [groups, subcategoryLabels],
+    [shown, subcategoryLabels],
   );
   const suggestedExpenses = useMemo(
     () => suggested.reduce((acc, g) => acc + g.count, 0),
@@ -78,7 +86,7 @@ export function CategorizeQueue({
 
   function onApplyAll() {
     startApplyAll(async () => {
-      const result = await applyAllSuggestions();
+      const result = await applyAllSuggestions(onlyRepeated ? MIN_GROUP_SIZE : 1);
       if (result.error) {
         toast.error(result.error);
         return;
@@ -109,8 +117,38 @@ export function CategorizeQueue({
         </div>
       )}
 
+      <div className="inline-flex rounded-lg border border-border bg-card p-1">
+        {[
+          { value: true, label: `${MIN_GROUP_SIZE} o más` },
+          { value: false, label: "Todos" },
+        ].map(({ value, label }) => (
+          <button
+            key={String(value)}
+            type="button"
+            aria-pressed={onlyRepeated === value}
+            onClick={() => {
+              setOnlyRepeated(value);
+              setVisible(PAGE);
+            }}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm transition-colors",
+              onlyRepeated === value
+                ? "bg-muted font-medium text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+            <span className="ml-1.5 tabular-nums opacity-60">
+              {value
+                ? groups.filter((g) => g.count >= MIN_GROUP_SIZE).length
+                : groups.length}
+            </span>
+          </button>
+        ))}
+      </div>
+
       <ul className="overflow-hidden rounded-xl border border-border bg-card">
-        {groups.slice(0, visible).map((group) => (
+        {shown.slice(0, visible).map((group) => (
           <li key={group.key} className="border-b border-border last:border-b-0">
             <GroupRow
               group={group}
@@ -131,9 +169,16 @@ export function CategorizeQueue({
         ))}
       </ul>
 
-      {visible < groups.length && (
+      {shown.length === 0 && (
+        <p className="rounded-xl border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground">
+          Ningún comercio llega a {MIN_GROUP_SIZE} gastos. Mirá “Todos” para
+          resolverlos de a uno.
+        </p>
+      )}
+
+      {visible < shown.length && (
         <Button variant="outline" className="w-full" onClick={() => setVisible(visible + PAGE)}>
-          Ver más ({groups.length - visible})
+          Ver más ({shown.length - visible})
         </Button>
       )}
 
@@ -261,13 +306,15 @@ function GroupRow({
           contradice, así que la moda no es una respuesta. */}
       {group.suggestion.kind === "varies" && (
         <p className="mt-1.5 text-xs text-muted-foreground">
-          Varía entre{" "}
-          {group.suggestion.options
-            .slice(0, 3)
-            .map((id) => subcategoryLabels[id]?.name)
-            .filter(Boolean)
-            .join(", ")}
-          . Bernie no elige por vos.
+          {/* Con un solo antecedente no hay nada entre qué variar: decirlo como
+              "varía entre X" sonaría a error. */}
+          {group.suggestion.options.length > 1
+            ? `Varía entre ${group.suggestion.options
+                .slice(0, 3)
+                .map((id) => subcategoryLabels[id]?.name)
+                .filter(Boolean)
+                .join(", ")}. Bernie no elige por vos.`
+            : "Lo categorizaste una sola vez. Bernie prefiere que elijas vos."}
         </p>
       )}
 

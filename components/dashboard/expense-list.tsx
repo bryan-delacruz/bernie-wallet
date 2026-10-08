@@ -85,12 +85,12 @@ export function ExpenseList({
                     {expense.subcategories?.name ?? "Sin categoría"}
                   </span>
                 </div>
-                {/* Quién anotó el gasto: vos o el correo del banco. Ahora que la
-                    fecha tiene línea propia hay lugar para decirlo siempre, y
-                    "Del banco" explica el origen mejor que "Sync". */}
+                {/* Quién anotó el gasto, no con qué mecanismo: o lo anotaste vos,
+                    o lo anotó Bernie leyendo el correo del banco. Por eso la
+                    etiqueta es la firma y no "Sync", que es palabra nuestra. */}
                 <p className="text-xs text-muted-foreground">
                   {formatShortDate(expense.occurred_at)} ·{" "}
-                  {expense.source === "manual" ? "Manual" : "Del banco"}
+                  {expense.source === "manual" ? "Manual" : "Bernie"}
                 </p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">

@@ -1345,6 +1345,14 @@ Cada grupo muestra el nombre del comercio, cuántos gastos tiene, el total acumu
 y el rango de fechas. Los grupos van **ordenados por cantidad de gastos**: lo que más
 se repite es lo que más rinde ordenar primero.
 
+**La cola arranca filtrada en `MIN_GROUP_SIZE` (5) gastos por comercio.** Lo que el
+lote ahorra es repetir la misma decisión; con dos o tres repeticiones casi no hay
+nada que ahorrar, y esos grupos solo alargan la lista por delante de los que sí
+importan. El filtro "5 o más / Todos" deja ver el resto de un toque, con el conteo de
+cada lado, y el total de pendientes sigue en el encabezado: no se esconde nada, se
+ordena por dónde conviene empezar. `Aplicar todas` respeta el filtro visible — aplica
+lo que el usuario está viendo, no lo que quedó detrás.
+
 Asignar una subcategoría a un comercio tiene un segundo efecto, por la memoria del
 sync (§9): a partir de ahí **los gastos futuros de ese comercio entran ya
 categorizados**. Ordenar el backlog no es solo limpiar el pasado, es dejar de
@@ -1461,6 +1469,12 @@ fila y devuelve el comercio a la memoria.
 La columna con valor queda reservada para la regla inversa ("para este comercio,
 siempre esta subcategoría"). El modelo y `suggestFor()` ya la contemplan; la UI
 todavía no la escribe, porque hoy la memoria ya hace eso de hecho.
+
+**Quién anotó el gasto.** En la lista de Actividad cada gasto cierra con `Manual` o
+`Bernie`. La etiqueta nombra al autor, no al mecanismo: o lo anotaste vos, o lo anotó
+Bernie leyendo el correo del banco. "Sync" es palabra nuestra y "Del banco" sería
+falso —el banco manda un correo, no anota nada—. La función puede llamarse "Bernie
+Sync" donde se la explica; en una línea de metadatos va la firma sola.
 
 **Dónde se decide.** `suggestFor()` y `autoSubcategory()` en
 `lib/categorize/merchant.ts` son el único lugar donde se cruzan reglas y memoria. El
