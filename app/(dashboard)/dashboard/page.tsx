@@ -28,8 +28,9 @@ const PAYMENT_META: Record<string, { label: string; color: string }> = {
   debit_card: { label: "TD", color: "var(--chart-2)" },
   yape: { label: "Yape", color: "var(--chart-3)" },
   account: { label: "Cuenta", color: "var(--chart-5)" },
+  cash: { label: "Efectivo", color: "var(--chart-4)" },
 };
-const PAYMENT_ORDER = ["credit_card", "debit_card", "yape", "account", "none"];
+const PAYMENT_ORDER = ["credit_card", "debit_card", "yape", "account", "cash", "none"];
 
 const limaDayStartIso = (day: string) => `${day}T05:00:00.000Z`;
 const limaDayFmt = new Intl.DateTimeFormat("en-CA", {

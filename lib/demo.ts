@@ -1,5 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { seedDefaultCategories } from "@/lib/seed";
+import { seedCashPaymentMethod, seedDefaultCategories } from "@/lib/seed";
 
 /**
  * Cuenta de demostración: un usuario anónimo de Supabase con tres meses de
@@ -59,6 +59,7 @@ export async function seedDemo(supabase: SupabaseClient, userId: string) {
   if (userErr) throw new Error(`users: ${userErr.message}`);
 
   await seedDefaultCategories(supabase, userId);
+  await seedCashPaymentMethod(supabase, userId);
 
   const { data: subs, error: subErr } = await supabase
     .from("subcategories")

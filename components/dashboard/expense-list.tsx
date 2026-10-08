@@ -24,6 +24,7 @@ const TIPO_LABEL: Record<string, string> = {
   debit_card: "TD",
   yape: "Yape",
   account: "Cuenta",
+  cash: "Efectivo",
 };
 
 export type ExpenseRow = {
@@ -88,7 +89,7 @@ export function ExpenseList({
                   {expense.payment_methods && (
                     <span className="text-foreground/70">
                       {TIPO_LABEL[expense.payment_methods.type] ?? expense.payment_methods.type}{" "}
-                      {expense.payment_methods.identifier}
+                      {expense.payment_methods.identifier ?? ""}
                     </span>
                   )}
                   {expense.source === "manual" ? <span>Manual</span> : null}

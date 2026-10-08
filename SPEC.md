@@ -190,6 +190,27 @@ Todas las tablas **excepto las de sistema** llevan `user_id` y **Row Level Secur
 - `updated_at` (timestamptz)
 - Un correo aquí se filtra de futuros syncs (no se reintenta).
 
+### 7.2.1 Efectivo como medio de pago
+
+Un retiro en cajero **no es un gasto**: la plata pasa de la cuenta al bolsillo, no
+sale del patrimonio. Por eso ese correo no está mapeado (§10.1). Pero lo que se
+compra con ese efectivo **sí** lo es, y hasta la migración 0017 no había dónde
+anotarlo: todo medio de pago colgaba de un banco y exigía un número.
+
+El efectivo no tiene ninguno de los dos, así que `user_bank_id` e `identifier`
+pasan a ser opcionales — **solo para él**. Un CHECK por forma lo garantiza: si el
+tipo es `cash`, ambos van nulos; si no, ambos son obligatorios. Así relajar la
+restricción no abre la puerta a que una tarjeta se quede sin identificador por
+descuido.
+
+Se crea **automáticamente** para cada usuario, en el alta y por backfill. Es
+universal y no hay nada que configurar; sin él, anotar un gasto pagado en efectivo
+obliga a elegir una tarjeta que no se usó. Por lo mismo no se puede editar ni
+borrar: no tiene datos que cambiar, y borrarlo dejaría gastos manuales sin medio.
+
+El sync nunca lo asigna: el efectivo solo aparece en gastos manuales, porque
+ninguna notificación del banco lo menciona.
+
 ### 7.3 RLS
 
 Para cada tabla personal (`users`, `user_banks`, `payment_methods`, `categories`, `subcategories`, `expenses`, `sync_logs`, `google_tokens`, `sync_failures`):

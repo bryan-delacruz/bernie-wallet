@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { encrypt } from "@/lib/crypto";
-import { seedDefaultCategories } from "@/lib/seed";
+import { seedCashPaymentMethod, seedDefaultCategories } from "@/lib/seed";
 import { NEXT_COOKIE, nextFromCookie } from "@/lib/safe-next";
 
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
 
   // Categorías por defecto siempre disponibles (manual o sync).
   await seedDefaultCategories(supabase, user.id);
+  await seedCashPaymentMethod(supabase, user.id);
 
   // Primer login (sin onboarding) → pantalla de onboarding; si no, al dashboard.
   const { data: profile } = await supabase
