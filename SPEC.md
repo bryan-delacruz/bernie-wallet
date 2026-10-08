@@ -585,6 +585,8 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
    filtros, búsqueda y **ordenamiento** de la lista (fecha ↕, monto ↕).
 9. **Gamificación y logros compartibles** (§16): racha diaria, catálogo corto de
    logros e imágenes para redes. Sin datos privados y sin página pública.
+10. **Panel de administración** (§17): consola del operador. Agregados y tablas de
+   sistema, nunca datos de usuarios.
 
 > **Responsive (soporte desde 320px).** En móvil los filtros se colapsan en un
 > **bottom-sheet** (`components/ui/sheet.tsx`, sobre la primitiva Dialog de Base UI):
@@ -1188,3 +1190,104 @@ migración; si molesta, se mueve a una columna de `users`.
 - **Virality menor que un "Wrapped" con nombres propios.** Es un costo aceptado y
   consciente: a cambio funciona desde la primera semana, no se rompe nunca por
   privacidad, y cada vez que alguien comparte está mostrando que la app anota sola.
+
+## 17. Panel de administración (hito 15)
+
+### 17.1 Para qué
+
+Hoy operar la app significa consultar SQL a mano: cuántas sincronizaciones
+fallaron, qué asuntos nuevos aparecieron, si un banco está activo. Eso no escala
+más allá del autor, y bloquea tareas concretas —como mapear las plantillas de un
+banco nuevo— detrás de alguien que sepa escribir consultas.
+
+El panel es **la consola del operador**, no una vista privilegiada de los datos de
+los usuarios. Esa distinción define todo lo demás.
+
+### 17.2 La regla que manda: agregados, nunca filas
+
+La política de privacidad declara que solo el usuario ve sus gastos, y el
+aislamiento vive en la base con RLS (§7.3). Un panel que leyera gastos ajenos
+rompería ambas cosas: convertiría la política en falsa y, bajo la Ley 29733, sería
+tratar datos más allá de la finalidad declarada.
+
+Por eso el panel **solo puede contar**. Las métricas se exponen como funciones
+`security definer` que devuelven conteos, y no existe ninguna que devuelva filas de
+`expenses`. No es disciplina del código de la página: es que la consulta peligrosa
+no está escrita en ninguna parte.
+
+Lo único con texto libre que ve el panel son los **asuntos descubiertos**
+(`sync_discoveries`), porque mapear un banco exige leerlos. Van sin el `user_id`
+asociado: interesa la plantilla, no de quién es el correo.
+
+### 17.3 Autorización
+
+- Columna `users.is_admin`, por defecto `false`, que **solo se activa a mano** desde
+  Supabase. Nadie se vuelve admin desde la app.
+- Las funciones de métricas **verifican el flag por dentro** y devuelven vacío si
+  quien llama no es admin. La protección vive en la base, no en el guard de la
+  página; el guard solo evita mostrar una pantalla inútil.
+- Route group `(admin)` con su propio layout y guard, separado de `(dashboard)`.
+
+Esconder la ruta no cuenta como control: OWASP recuerda que `/admin` es lo primero
+que alguien prueba.
+
+### 17.4 Auditoría
+
+Toda acción del panel que cambie algo queda registrada en `admin_audit`: quién,
+qué, cuándo y el valor anterior. OWASP liga la separación administrativa a la
+trazabilidad, y acá es barato: son tres o cuatro acciones posibles.
+
+### 17.5 Qué muestra (v1)
+
+**Salud de las sincronizaciones**
+- Corridas de las últimas 24 h y 7 días, por origen (`manual` / `cron`).
+- Cuántas fallaron y con qué código; cuántas cuentas perdieron el acceso a Gmail.
+- Correos descartados y corridas detenidas por el cortacircuitos.
+
+**Mapeo de bancos**
+- Asuntos descubiertos todavía sin mapear, con su remitente y cuántas veces
+  aparecieron. Es la herramienta para cerrar TC y TD de Interbank.
+- Por banco: activo sí/no y descubrimiento encendido/apagado.
+
+**Uso agregado**
+- Usuarios registrados, cuántos con Gmail conectado, cuántos activos esta semana.
+- Gastos registrados en total y en la semana. Un número, nunca un monto.
+
+### 17.6 El interruptor de descubrimiento se muda a la base
+
+`SYNC_DISCOVERY` deja de ser variable de entorno y pasa a ser
+`system_banks.discovering`. Tres razones:
+
+1. **Por banco, no global**: quien solo usa BCP deja de gastar cuota en una búsqueda
+   que no va a descubrir nada.
+2. **Sin redeploy**: hoy apagarlo exige volver a desplegar.
+3. **Con registro**: encenderlo queda en `admin_audit`, y una variable de entorno no
+   deja rastro de quién la tocó.
+
+### 17.7 Dónde vive, y cuándo se muda
+
+Arranca **dentro de este proyecto**, como route group. Es lo proporcional a un
+operador único y dos usuarios.
+
+**Antes de abrir la app más allá de la familia**, se muda a su **propio proyecto de
+Vercel** desde el mismo repositorio, con dominio aparte y Deployment Protection
+encendida: el panel exigiría la cuenta de Vercel del operador antes de servir una
+sola página. Eso materializa el "host separado" que recomienda OWASP sin duplicar
+código.
+
+La mudanza es barata **si** la lógica vive en funciones de base y componentes
+propios, no desparramada en las páginas. Esa es la razón de diseñarlo así desde el
+principio.
+
+Un repositorio aparte no se justifica: con un solo desarrollador, mantener dos en
+sincronía cuesta más de lo que protege.
+
+### 17.8 Riesgos
+
+- **El panel es superficie nueva.** Se mitiga con agregados (§17.2): comprometerlo
+  expone "hay 5 usuarios", no la plata de nadie.
+- **`security definer` ejecuta con permisos elevados.** Cada función fija su
+  `search_path` y valida `is_admin` en su primera línea.
+- **Mezclar operación y producto.** Uber Central muestra el riesgo: las excepciones
+  de la herramienta interna terminan filtrándose a las reglas del producto. Acá el
+  panel no escribe sobre datos de usuario — solo sobre tablas de sistema.
