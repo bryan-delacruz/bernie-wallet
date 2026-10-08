@@ -8,8 +8,8 @@ export const DEFAULT_CATEGORIES: { name: string; subcategories: string[] }[] = [
     subcategories: ["Estacionamiento", "Taxi / Uber", "Combustible", "Transporte público"],
   },
   { name: "Alimentación", subcategories: ["Restaurantes", "Supermercado", "Delivery"] },
-  { name: "Salud", subcategories: [] },
-  { name: "Entretenimiento", subcategories: [] },
+  { name: "Salud", subcategories: ["Farmacia", "Consultas", "Mascotas"] },
+  { name: "Entretenimiento", subcategories: ["Cine", "Streaming", "Salidas"] },
   { name: "Transferencias", subcategories: ["Persona a persona", "Pago a terceros"] },
   { name: "Otros", subcategories: [] },
 ];
