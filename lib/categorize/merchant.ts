@@ -19,15 +19,41 @@ export function normMerchant(m: string): string {
 /** Fila mínima para construir la memoria: lo que el gasto ya categorizado aporta. */
 export type MemoryRow = { merchant: string | null; subcategory_id: string | null };
 
+/** Acuerdo mínimo del historial para que la memoria hable. Por debajo, el comercio
+ *  se usó para cosas distintas y la subcategoría más frecuente no es una respuesta,
+ *  es un empate con suerte. */
+export const MIN_AGREEMENT = 0.7;
+/** Antecedentes mínimos. Con uno solo no hay acuerdo que medir: una categorización
+ *  suelta no puede decidir todo lo que venga después de ese comercio. */
+export const MIN_SAMPLES = 2;
+
+export type MerchantMemoryEntry = {
+  /** La subcategoría más frecuente del comercio. */
+  subcategoryId: string;
+  /** Veces que ganó, sobre el total de gastos categorizados del comercio. */
+  count: number;
+  total: number;
+  /** `count / total`. 1 es un historial unánime. */
+  agreement: number;
+  /** Todas las subcategorías del comercio, de más a menos frecuente. Sirve para
+   *  explicar en qué varía, no para elegir. */
+  ranked: string[];
+};
+
+export type MerchantMemory = Map<string, MerchantMemoryEntry>;
+
 /**
- * Memoria por comercio a partir de gastos ya categorizados:
- * `merchant normalizado → subcategoría más frecuente`.
+ * Memoria por comercio a partir de gastos ya categorizados.
+ *
+ * Devuelve el acuerdo además de la moda: quien consulta decide si eso alcanza. Un
+ * comercio con 9 de 10 "Alquiler" y otro con 5 y 5 tienen la misma moda y no
+ * merecen la misma confianza.
  *
  * Empate: gana la primera que llegó. El llamador ordena por fecha descendente, así
  * que "la primera" es la más reciente — el desempate favorece lo último que el
  * usuario decidió.
  */
-export function tallyMerchantMemory(rows: MemoryRow[]): Map<string, string> {
+export function tallyMerchantMemory(rows: MemoryRow[]): MerchantMemory {
   const counts = new Map<string, Map<string, number>>();
 
   for (const row of rows) {
@@ -38,19 +64,74 @@ export function tallyMerchantMemory(rows: MemoryRow[]): Map<string, string> {
     counts.set(key, inner);
   }
 
-  const memory = new Map<string, string>();
+  const memory: MerchantMemory = new Map();
   for (const [key, inner] of counts) {
-    let best = "";
-    let bestN = 0;
-    for (const [sub, n] of inner) {
-      if (n > bestN) {
-        bestN = n;
-        best = sub;
-      }
-    }
-    if (best) memory.set(key, best);
+    const ranked = [...inner.entries()].sort((a, b) => b[1] - a[1]);
+    const [subcategoryId, count] = ranked[0];
+    const total = ranked.reduce((acc, [, n]) => acc + n, 0);
+    memory.set(key, {
+      subcategoryId,
+      count,
+      total,
+      agreement: count / total,
+      ranked: ranked.map(([id]) => id),
+    });
   }
   return memory;
+}
+
+/**
+ * Reglas del usuario: `comercio normalizado → subcategoría fija`, o `null` para
+ * "no generalizar este comercio". Manda sobre la memoria: lo que el usuario declara
+ * le gana a lo que la app aprendió.
+ */
+export type MerchantRules = Map<string, string | null>;
+
+export type Suggestion =
+  /** Sin historial: no hay nada que sugerir. */
+  | { kind: "none" }
+  /** El usuario pidió no generalizar este comercio. */
+  | { kind: "muted" }
+  /** Hay historial, pero se contradice. `options` va de más a menos frecuente. */
+  | { kind: "varies"; options: string[] }
+  | { kind: "memory"; subcategoryId: string; agreement: number }
+  /** Regla del usuario con subcategoría fija. */
+  | { kind: "pinned"; subcategoryId: string };
+
+/** Qué decir sobre un comercio. Único lugar donde se cruzan reglas y memoria. */
+export function suggestFor(
+  key: string,
+  memory: MerchantMemory,
+  rules: MerchantRules,
+): Suggestion {
+  if (rules.has(key)) {
+    const pinned = rules.get(key) ?? null;
+    return pinned ? { kind: "pinned", subcategoryId: pinned } : { kind: "muted" };
+  }
+
+  const entry = memory.get(key);
+  if (!entry) return { kind: "none" };
+
+  if (entry.total < MIN_SAMPLES || entry.agreement < MIN_AGREEMENT) {
+    return { kind: "varies", options: entry.ranked };
+  }
+  return { kind: "memory", subcategoryId: entry.subcategoryId, agreement: entry.agreement };
+}
+
+/**
+ * Subcategoría que el sync puede asignar solo, o `null` para dejar el gasto
+ * pendiente. Callarse es la respuesta correcta ante la duda: un gasto sin categoría
+ * se ve y se corrige, uno mal categorizado se esconde en el total.
+ */
+export function autoSubcategory(
+  key: string,
+  memory: MerchantMemory,
+  rules: MerchantRules,
+): string | null {
+  const suggestion = suggestFor(key, memory, rules);
+  return suggestion.kind === "memory" || suggestion.kind === "pinned"
+    ? suggestion.subcategoryId
+    : null;
 }
 
 /** Gasto pendiente tal como lo necesita la cola (nada de medio de pago ni origen). */
@@ -68,8 +149,10 @@ export type MerchantGroup = {
   key: string;
   /** Nombre a mostrar: el del gasto más reciente, sin normalizar. */
   label: string;
-  /** Ids de **todos** los gastos del grupo: lo que recibe el UPDATE en lote. */
-  expenseIds: string[];
+  /** Todos los gastos del grupo, del más reciente al más viejo. Los ids son lo que
+   *  recibe el UPDATE en lote; el resto se muestra cuando el grupo se abre de a uno
+   *  (comercio que el usuario pidió no generalizar). */
+  expenses: PendingExpense[];
   count: number;
   /** Total por moneda: PEN y USD no se suman entre sí. */
   totals: { currency: string; amount: number }[];
@@ -98,7 +181,7 @@ export function groupUncategorized(rows: PendingExpense[]): MerchantGroup[] {
       drafts.set(key, {
         key,
         label: (row.merchant ?? "").trim(),
-        expenseIds: [row.id],
+        expenses: [row],
         count: 1,
         totals: new Map([[row.currency, amount]]),
         firstAt: row.occurred_at,
@@ -107,7 +190,7 @@ export function groupUncategorized(rows: PendingExpense[]): MerchantGroup[] {
       continue;
     }
 
-    existing.expenseIds.push(row.id);
+    existing.expenses.push(row);
     existing.count += 1;
     existing.totals.set(row.currency, (existing.totals.get(row.currency) ?? 0) + amount);
     if (row.occurred_at < existing.firstAt) existing.firstAt = row.occurred_at;
@@ -122,6 +205,7 @@ export function groupUncategorized(rows: PendingExpense[]): MerchantGroup[] {
   return [...drafts.values()]
     .map((d) => ({
       ...d,
+      expenses: d.expenses.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at)),
       totals: [...d.totals.entries()]
         .map(([currency, amount]) => ({ currency, amount }))
         .sort((a, b) => b.amount - a.amount),

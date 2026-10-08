@@ -104,12 +104,13 @@ export async function applyAllSuggestions(): Promise<BulkResult> {
 
   let updated = 0;
   for (const group of groups) {
-    if (!group.suggestedSubcategoryId) continue;
+    // Solo lo que la app puede afirmar: "varía" y "no agrupar" se quedan afuera.
+    if (group.suggestion.kind !== "memory" && group.suggestion.kind !== "pinned") continue;
     const result = await assignInBatches(
       supabase,
       userId,
-      group.expenseIds,
-      group.suggestedSubcategoryId,
+      group.expenses.map((e) => e.id),
+      group.suggestion.subcategoryId,
     );
     if ("error" in result) return result;
     updated += result.updated;
@@ -119,4 +120,39 @@ export async function applyAllSuggestions(): Promise<BulkResult> {
 
   refresh(false);
   return { updated };
+}
+
+/**
+ * Marca o desmarca un comercio como "no generalizar".
+ *
+ * La regla la declara el usuario y le gana a la memoria: a partir de acá el sync
+ * deja de autocategorizar ese comercio y la cola deja de ofrecer un solo botón para
+ * todo el grupo. Desmarcar borra la fila y devuelve el comercio a la memoria.
+ */
+export async function setMerchantMuted(
+  merchantKey: string,
+  muted: boolean,
+): Promise<{ error?: string }> {
+  const key = merchantKey.trim().slice(0, 200);
+  if (!key) return { error: "Comercio inválido." };
+
+  const { supabase, userId } = await requireUser();
+
+  const { error } = muted
+    ? await supabase
+        .from("merchant_rules")
+        .upsert(
+          { user_id: userId, merchant_key: key, subcategory_id: null },
+          { onConflict: "user_id,merchant_key" },
+        )
+    : await supabase
+        .from("merchant_rules")
+        .delete()
+        .eq("user_id", userId)
+        .eq("merchant_key", key);
+
+  if (error) return { error: "No se pudo guardar la regla." };
+
+  refresh(false);
+  return {};
 }

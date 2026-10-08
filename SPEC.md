@@ -289,10 +289,11 @@ Usuario presiona "Sincronizar"
          (si no matchea → descarte definitivo, se avanza el cursor)
       2. Pasar texto + tipo al parser programático → extraer datos del gasto
       3. payment_method_identifier → buscar o **auto-crear** medio de pago
-      3b. **Autocategorización:** subcategoría según la *memoria por comercio*
-          (aprendida de los últimos 2000 gastos ya categorizados; merchant normalizado
-          → subcategoría más frecuente). Sin IA; si el comercio no tiene historial,
-          queda sin categoría.
+      3b. **Autocategorización:** subcategoría según la *regla del usuario* para ese
+          comercio y, si no hay, la *memoria por comercio* (últimos 2000 gastos ya
+          categorizados; merchant normalizado → subcategoría más frecuente). Sin IA.
+          Queda **sin categoría** si el comercio no tiene historial, si el usuario
+          pidió no generalizarlo, o si su historial se contradice (§18.3, §18.8).
       4. Insertar en expenses (source = "sync"; occurred_at = fecha del correo)
       5. Avanzar el cursor hasta la fecha de este correo
   → Actualizar sync_logs (last_sync_at = fecha del último correo resuelto)
@@ -1349,16 +1350,31 @@ sync (§9): a partir de ahí **los gastos futuros de ese comercio entran ya
 categorizados**. Ordenar el backlog no es solo limpiar el pasado, es dejar de
 producirlo.
 
-### 18.3 Sugerencias (misma memoria del sync, sin IA)
+### 18.3 Sugerencias: la memoria habla solo cuando está de acuerdo consigo misma
 
-Si el usuario ya categorizó antes algún gasto de ese comercio, el grupo llega con la
+Si el usuario ya categorizó antes gastos de ese comercio, el grupo llega con la
 subcategoría **sugerida** y un control para aplicarla de un toque. La sugerencia sale
-de la misma memoria por comercio que usa el sync —la subcategoría más frecuente de
-ese comercio en los últimos `MERCHANT_MEMORY_LIMIT` gastos categorizados— así que la
-app no puede sugerir en `/categorize` algo distinto de lo que el sync asignaría.
+de la misma memoria por comercio que usa el sync, así que la app no puede sugerir en
+`/categorize` algo distinto de lo que el sync asignaría.
 
-`Aplicar todas` ejecuta las sugerencias pendientes en un solo paso. Nunca se aplica
-nada sin que el usuario lo pida: la sugerencia se muestra, no se guarda sola.
+Pero la moda sola no alcanza. La memoria supone **"mismo comercio = mismo gasto"**, y
+eso vale para un supermercado y no vale para una persona: el mismo Yape puede ser la
+renta, un préstamo devuelto y la cena compartida. Un comercio con 9 de 10 "Alquiler" y
+otro con 5 y 5 tienen la misma moda y no merecen la misma confianza.
+
+Por eso la memoria devuelve el **acuerdo** además de la moda, y solo habla cuando:
+
+- hay al menos `MIN_SAMPLES` (2) antecedentes — con uno solo no hay acuerdo que medir, y
+  una categorización suelta no puede decidir todo lo que venga después; y
+- el acuerdo llega a `MIN_AGREEMENT` (0.7).
+
+Debajo de eso el grupo se marca como **"varía"**, muestra entre qué subcategorías, y
+**no ofrece botón de un toque**. El sync tampoco autocategoriza: el gasto queda
+pendiente. Callarse es la respuesta correcta ante la duda — un gasto sin categoría se
+ve y se corrige, uno mal categorizado se esconde dentro del total.
+
+`Aplicar todas` ejecuta solo las sugerencias firmes. Nunca se aplica nada sin que el
+usuario lo pida: la sugerencia se muestra, no se guarda sola.
 
 ### 18.4 Reutilización: una sola definición de la memoria por comercio
 
@@ -1403,3 +1419,30 @@ reporta mal sin que se sepa por qué.
 La página no es compartible y no genera imagen. Es trabajo interno del usuario sobre
 sus propios datos, bajo la misma RLS que el resto (§7.3). No cuenta para la racha ni
 para los logros: §16.4 ya decide que el backlog se muestra pero no premia.
+
+### 18.8 Reglas por comercio: la excepción que el usuario declara
+
+Medir el acuerdo es la app **sospechando** que un comercio es ambiguo, y llega tarde:
+lo sospecha al tercer o cuarto gasto, después de haberse equivocado. El usuario lo
+sabe desde el primero. Por eso existe la regla explícita, y **manda sobre lo
+aprendido**.
+
+El orden de precedencia es:
+
+1. **Regla del usuario** (`merchant_rules`, migración `0018`).
+2. **Memoria aprendida**, solo si no hay regla y el historial está de acuerdo.
+3. **Nada**: el gasto queda pendiente.
+
+La regla es una fila por comercio normalizado, con RLS como toda tabla de usuario.
+`subcategory_id` nulo significa **"no generalizar este comercio"**: ni se sugiere, ni
+el sync autocategoriza, y en la cola el grupo deja de ofrecer una sola decisión para
+todos — se abre en sus gastos y cada uno se resuelve por separado. Desmarcar borra la
+fila y devuelve el comercio a la memoria.
+
+La columna con valor queda reservada para la regla inversa ("para este comercio,
+siempre esta subcategoría"). El modelo y `suggestFor()` ya la contemplan; la UI
+todavía no la escribe, porque hoy la memoria ya hace eso de hecho.
+
+**Dónde se decide.** `suggestFor()` y `autoSubcategory()` en
+`lib/categorize/merchant.ts` son el único lugar donde se cruzan reglas y memoria. El
+sync y la cola llaman a las mismas funciones, así que no pueden divergir.

@@ -1,9 +1,12 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
+  autoSubcategory,
   groupUncategorized,
   normMerchant,
+  suggestFor,
   tallyMerchantMemory,
+  type MerchantRules,
   type PendingExpense,
 } from "./merchant.ts";
 
@@ -23,13 +26,17 @@ test("normMerchant agrupa variantes de grafía del mismo comercio", () => {
   assert.equal(normMerchant(""), "");
 });
 
-test("la memoria elige la subcategoría más frecuente del comercio", () => {
+test("la memoria elige la subcategoría más frecuente y reporta el acuerdo", () => {
   const memory = tallyMerchantMemory([
     { merchant: "Plaza Vea", subcategory_id: "mercado" },
     { merchant: "PLAZA VEA", subcategory_id: "mercado" },
     { merchant: "plaza vea", subcategory_id: "antojos" },
   ]);
-  assert.equal(memory.get("PLAZA VEA"), "mercado");
+  const entry = memory.get("PLAZA VEA");
+  assert.equal(entry?.subcategoryId, "mercado");
+  assert.equal(entry?.total, 3);
+  assert.equal(entry?.agreement, 2 / 3);
+  assert.deepEqual(entry?.ranked, ["mercado", "antojos"]);
 });
 
 test("la memoria ignora filas sin comercio o sin subcategoría", () => {
@@ -46,7 +53,7 @@ test("en empate gana la primera fila, que es la más reciente", () => {
     { merchant: "Rappi", subcategory_id: "reciente" },
     { merchant: "Rappi", subcategory_id: "antigua" },
   ]);
-  assert.equal(memory.get("RAPPI"), "reciente");
+  assert.equal(memory.get("RAPPI")?.subcategoryId, "reciente");
 });
 
 test("agrupa por comercio normalizado y suma por moneda", () => {
@@ -59,7 +66,7 @@ test("agrupa por comercio normalizado y suma por moneda", () => {
   assert.equal(groups.length, 1);
   assert.equal(groups[0].key, "PLAZA VEA");
   assert.equal(groups[0].count, 3);
-  assert.deepEqual(groups[0].expenseIds.sort(), ["1", "2", "3"]);
+  assert.deepEqual(groups[0].expenses.map((e) => e.id).sort(), ["1", "2", "3"]);
   assert.deepEqual(groups[0].totals, [
     { currency: "PEN", amount: 50 },
     { currency: "USD", amount: 5 },
@@ -106,4 +113,81 @@ test("acepta el monto como string, tal como lo devuelve numeric de Postgres", ()
     { id: "1", merchant: "Rappi", amount: "25.50", currency: "PEN", occurred_at: "2026-10-01T12:00:00Z" },
   ]);
   assert.deepEqual(groups[0].totals, [{ currency: "PEN", amount: 25.5 }]);
+});
+
+const NO_RULES: MerchantRules = new Map();
+
+test("un historial unánime se sugiere y el sync lo aplica solo", () => {
+  const memory = tallyMerchantMemory([
+    { merchant: "Rappi", subcategory_id: "delivery" },
+    { merchant: "Rappi", subcategory_id: "delivery" },
+  ]);
+  assert.deepEqual(suggestFor("RAPPI", memory, NO_RULES), {
+    kind: "memory",
+    subcategoryId: "delivery",
+    agreement: 1,
+  });
+  assert.equal(autoSubcategory("RAPPI", memory, NO_RULES), "delivery");
+});
+
+test("un solo antecedente no alcanza para decidir todo lo que venga", () => {
+  const memory = tallyMerchantMemory([{ merchant: "Juan P.", subcategory_id: "cena" }]);
+  assert.deepEqual(suggestFor("JUAN P.", memory, NO_RULES), {
+    kind: "varies",
+    options: ["cena"],
+  });
+  assert.equal(autoSubcategory("JUAN P.", memory, NO_RULES), null);
+});
+
+test("un historial que se contradice no sugiere nada", () => {
+  // Yapes a la misma persona: renta, préstamo y cena. La moda es un empate con suerte.
+  const memory = tallyMerchantMemory([
+    { merchant: "Juan P.", subcategory_id: "alquiler" },
+    { merchant: "Juan P.", subcategory_id: "alquiler" },
+    { merchant: "Juan P.", subcategory_id: "prestamos" },
+    { merchant: "Juan P.", subcategory_id: "cena" },
+  ]);
+  const suggestion = suggestFor("JUAN P.", memory, NO_RULES);
+  assert.equal(suggestion.kind, "varies");
+  assert.equal(autoSubcategory("JUAN P.", memory, NO_RULES), null);
+});
+
+test("un comercio sin historial no dice nada", () => {
+  assert.deepEqual(suggestFor("NUEVO", new Map(), NO_RULES), { kind: "none" });
+});
+
+test("la regla del usuario le gana a un historial unánime", () => {
+  const memory = tallyMerchantMemory([
+    { merchant: "Juan P.", subcategory_id: "alquiler" },
+    { merchant: "Juan P.", subcategory_id: "alquiler" },
+    { merchant: "Juan P.", subcategory_id: "alquiler" },
+  ]);
+  const rules: MerchantRules = new Map([["JUAN P.", null]]);
+  assert.deepEqual(suggestFor("JUAN P.", memory, rules), { kind: "muted" });
+  assert.equal(autoSubcategory("JUAN P.", memory, rules), null);
+});
+
+test("una regla con subcategoría fija manda sobre la memoria", () => {
+  const memory = tallyMerchantMemory([
+    { merchant: "Rappi", subcategory_id: "delivery" },
+    { merchant: "Rappi", subcategory_id: "delivery" },
+  ]);
+  const rules: MerchantRules = new Map([["RAPPI", "antojos"]]);
+  assert.deepEqual(suggestFor("RAPPI", memory, rules), {
+    kind: "pinned",
+    subcategoryId: "antojos",
+  });
+  assert.equal(autoSubcategory("RAPPI", memory, rules), "antojos");
+});
+
+test("los gastos del grupo quedan del más reciente al más viejo", () => {
+  const groups = groupUncategorized([
+    pending("viejo", "Rappi", 10, "2026-10-01T12:00:00Z"),
+    pending("nuevo", "Rappi", 10, "2026-10-09T12:00:00Z"),
+    pending("medio", "Rappi", 10, "2026-10-05T12:00:00Z"),
+  ]);
+  assert.deepEqual(
+    groups[0].expenses.map((e) => e.id),
+    ["nuevo", "medio", "viejo"],
+  );
 });
