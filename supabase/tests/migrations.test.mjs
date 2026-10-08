@@ -315,4 +315,37 @@ await test("cola de webhooks: ni usuarios ni anon pueden reclamar", async () => 
   await expectError(as(null, (tx) => tx.query("select complete_integration_event(gen_random_uuid(), true)")), "42501");
 });
 
+
+await test("reglas por comercio: cada usuario ve solo las suyas, y el token OAuth ninguna", async () => {
+  await as(user(A), async (tx) => {
+    await tx.query(
+      `insert into merchant_rules (user_id, merchant_key) values ($1, 'JUAN P.')`,
+      [A],
+    );
+    assert.equal((await rows(tx, "select * from merchant_rules")).length, 1);
+  });
+
+  // B no ve la regla de A, y no puede escribirla a su nombre.
+  await as(user(B), async (tx) => {
+    assert.equal((await rows(tx, "select * from merchant_rules")).length, 0);
+    await expectError(
+      tx.query(`insert into merchant_rules (user_id, merchant_key) values ($1, 'X')`, [A]),
+      "42501",
+    );
+  });
+
+  await as(oauth(A), async (tx) => {
+    assert.equal((await rows(tx, "select * from merchant_rules")).length, 0);
+  });
+
+  // Una sola regla por comercio: la segunda choca con el único.
+  await expectError(
+    db.query(`insert into merchant_rules (user_id, merchant_key) values ($1, 'JUAN P.')`, [A]),
+    "23505",
+  );
+
+  await db.query(`delete from merchant_rules where user_id = $1`, [A]);
+});
+
+
 console.log(`\n${n} pruebas OK`);

@@ -5,14 +5,17 @@ import { fetchAllRows } from "@/lib/supabase/paginate";
 import {
   MERCHANT_MEMORY_LIMIT,
   groupUncategorized,
+  suggestFor,
   tallyMerchantMemory,
   type MerchantGroup,
+  type MerchantRules,
   type PendingExpense,
+  type Suggestion,
 } from "@/lib/categorize/merchant";
 
 export type SuggestedGroup = MerchantGroup & {
-  /** Subcategoría que el sync asignaría a este comercio, si ya aprendió de él. */
-  suggestedSubcategoryId: string | null;
+  /** Qué decir sobre este comercio: la sugerencia, "varía", o "no agrupar". */
+  suggestion: Suggestion;
 };
 
 export type CategorizationQueue = {
@@ -25,19 +28,33 @@ export type CategorizationQueue = {
   truncated: boolean;
 };
 
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+/** Reglas del usuario, listas para consultar por comercio normalizado. */
+export async function loadMerchantRules(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<MerchantRules> {
+  const { data } = await supabase
+    .from("merchant_rules")
+    .select("merchant_key, subcategory_id")
+    .eq("user_id", userId);
+
+  return new Map((data ?? []).map((r) => [r.merchant_key, r.subcategory_id]));
+}
+
 /**
  * Cola de categorización del usuario: gastos sin subcategoría agrupados por
- * comercio, con la sugerencia de la memoria del sync.
+ * comercio, con lo que la app puede decir de cada uno.
  *
  * Pagina la lectura: el backlog puede pasar las 1000 filas que la API de Supabase
- * corta en silencio. Memoizada por request (`cache`) porque la página y su
- * encabezado la necesitan por separado.
+ * corta en silencio. Memoizada por request (`cache`).
  */
 export const loadCategorizationQueue = cache(
   async (userId: string): Promise<CategorizationQueue> => {
     const supabase = await createClient();
 
-    const [pending, memoryRows] = await Promise.all([
+    const [pending, memoryRows, rules] = await Promise.all([
       fetchAllRows<PendingExpense>((from, to) =>
         supabase
           .from("expenses")
@@ -54,12 +71,13 @@ export const loadCategorizationQueue = cache(
         .not("subcategory_id", "is", null)
         .order("occurred_at", { ascending: false })
         .limit(MERCHANT_MEMORY_LIMIT),
+      loadMerchantRules(supabase, userId),
     ]);
 
     const memory = tallyMerchantMemory(memoryRows.data ?? []);
     const groups = groupUncategorized(pending.rows).map((group) => ({
       ...group,
-      suggestedSubcategoryId: memory.get(group.key) ?? null,
+      suggestion: suggestFor(group.key, memory, rules),
     }));
 
     const grouped = groups.reduce((acc, g) => acc + g.count, 0);

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, Sparkles, Tag } from "lucide-react";
+import { Check, ChevronDown, Sparkles, Tag, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -12,8 +12,13 @@ import {
   type ComboboxValue,
 } from "@/components/ui/creatable-combobox";
 import type { CategoryOption } from "@/components/dashboard/expense-form";
-import { categorizeBulk, applyAllSuggestions } from "@/app/(dashboard)/categorize/actions";
+import {
+  categorizeBulk,
+  applyAllSuggestions,
+  setMerchantMuted,
+} from "@/app/(dashboard)/categorize/actions";
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import type { PendingExpense, Suggestion } from "@/lib/categorize/merchant";
 import type { Taxonomy } from "@/lib/taxonomy";
 
 /** Grupos visibles al entrar, y cuántos agrega cada "Ver más". El trabajo útil
@@ -23,16 +28,23 @@ const PAGE = 20;
 export type QueueGroup = {
   key: string;
   label: string;
-  expenseIds: string[];
+  expenses: PendingExpense[];
   count: number;
   totals: { currency: string; amount: number }[];
   firstAt: string;
   lastAt: string;
-  suggestedSubcategoryId: string | null;
+  suggestion: Suggestion;
 };
 
-/** `subcategory_id → etiqueta legible`, para pintar la sugerencia. */
+/** `subcategory_id → etiqueta legible`, para nombrar lo que la app sugiere. */
 export type SubcategoryLabels = Record<string, { name: string; categoryName: string }>;
+
+/** La sugerencia es accionable de un toque solo cuando la app puede afirmarla. */
+function actionableSubcategory(suggestion: Suggestion): string | null {
+  return suggestion.kind === "memory" || suggestion.kind === "pinned"
+    ? suggestion.subcategoryId
+    : null;
+}
 
 export function CategorizeQueue({
   groups,
@@ -52,7 +64,11 @@ export function CategorizeQueue({
   const [applyingAll, startApplyAll] = useTransition();
 
   const suggested = useMemo(
-    () => groups.filter((g) => g.suggestedSubcategoryId && subcategoryLabels[g.suggestedSubcategoryId]),
+    () =>
+      groups.filter((g) => {
+        const id = actionableSubcategory(g.suggestion);
+        return id !== null && subcategoryLabels[id];
+      }),
     [groups, subcategoryLabels],
   );
   const suggestedExpenses = useMemo(
@@ -99,11 +115,7 @@ export function CategorizeQueue({
             <GroupRow
               group={group}
               categories={categories}
-              suggestionLabel={
-                group.suggestedSubcategoryId
-                  ? subcategoryLabels[group.suggestedSubcategoryId]
-                  : undefined
-              }
+              subcategoryLabels={subcategoryLabels}
               open={openKey === group.key}
               busy={busyKey === group.key}
               disabled={applyingAll || (busyKey !== null && busyKey !== group.key)}
@@ -113,6 +125,7 @@ export function CategorizeQueue({
                 setOpenKey(null);
                 router.refresh();
               }}
+              onRuleChanged={() => router.refresh()}
             />
           </li>
         ))}
@@ -137,27 +150,39 @@ export function CategorizeQueue({
 function GroupRow({
   group,
   categories,
-  suggestionLabel,
+  subcategoryLabels,
   open,
   busy,
   disabled,
   onToggle,
   onBusyChange,
   onSaved,
+  onRuleChanged,
 }: {
   group: QueueGroup;
   categories: CategoryOption[];
-  suggestionLabel?: { name: string; categoryName: string };
+  subcategoryLabels: SubcategoryLabels;
   open: boolean;
   busy: boolean;
   disabled: boolean;
   onToggle: () => void;
   onBusyChange: (busy: boolean) => void;
   onSaved: () => void;
+  onRuleChanged: () => void;
 }) {
-  async function save(taxonomy: Taxonomy) {
+  const [savingRule, startSaveRule] = useTransition();
+  /** Gasto que se está categorizando solo, en un comercio sin agrupar. */
+  const [singleId, setSingleId] = useState<string | null>(null);
+
+  const muted = group.suggestion.kind === "muted";
+  const suggestedId = actionableSubcategory(group.suggestion);
+  const suggestionLabel = suggestedId ? subcategoryLabels[suggestedId] : undefined;
+
+  /** Aplica a `ids`; sin argumento, a todo el grupo. */
+  async function save(taxonomy: Taxonomy, ids?: string[]) {
+    const target = ids ?? group.expenses.map((e) => e.id);
     onBusyChange(true);
-    const result = await categorizeBulk(group.expenseIds, taxonomy);
+    const result = await categorizeBulk(target, taxonomy);
     onBusyChange(false);
     if (result.error) {
       toast.error(result.error);
@@ -166,7 +191,24 @@ function GroupRow({
     toast.success(
       `${result.updated} ${result.updated === 1 ? "gasto" : "gastos"} de ${group.label} categorizados`,
     );
+    setSingleId(null);
     onSaved();
+  }
+
+  function toggleRule() {
+    startSaveRule(async () => {
+      const result = await setMerchantMuted(group.key, !muted);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        muted
+          ? `Bernie vuelve a agrupar ${group.label}`
+          : `${group.label} se categoriza de a uno`,
+      );
+      onRuleChanged();
+    });
   }
 
   return (
@@ -183,7 +225,7 @@ function GroupRow({
           </p>
         </div>
 
-        {suggestionLabel && !open ? (
+        {suggestionLabel && !open && (
           <Button
             size="sm"
             variant="outline"
@@ -192,7 +234,7 @@ function GroupRow({
               save({
                 categoryId: null,
                 categoryName: null,
-                subcategoryId: group.suggestedSubcategoryId,
+                subcategoryId: suggestedId,
                 subcategoryName: null,
               })
             }
@@ -201,7 +243,7 @@ function GroupRow({
             <Check className="size-4" />
             {suggestionLabel.name}
           </Button>
-        ) : null}
+        )}
 
         <Button
           size="sm"
@@ -210,19 +252,83 @@ function GroupRow({
           disabled={busy || disabled}
           className="shrink-0"
         >
-          <Tag className="size-4" />
-          {open ? "Cerrar" : "Otra"}
+          {muted ? <ChevronDown className="size-4" /> : <Tag className="size-4" />}
+          {open ? "Cerrar" : muted ? "Ver gastos" : suggestionLabel ? "Otra" : "Elegir"}
         </Button>
       </div>
 
-      {open && (
+      {/* Por qué no hay un botón de un toque: el historial de este comercio se
+          contradice, así que la moda no es una respuesta. */}
+      {group.suggestion.kind === "varies" && (
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Varía entre{" "}
+          {group.suggestion.options
+            .slice(0, 3)
+            .map((id) => subcategoryLabels[id]?.name)
+            .filter(Boolean)
+            .join(", ")}
+          . Bernie no elige por vos.
+        </p>
+      )}
+
+      {muted && (
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Sin agrupar: cada gasto va por su cuenta.
+        </p>
+      )}
+
+      {open && !muted && (
         <GroupPicker
           categories={categories}
           count={group.count}
           busy={busy}
-          onSave={save}
+          onSave={(taxonomy) => save(taxonomy)}
         />
       )}
+
+      {open && muted && (
+        <ul className="mt-3 space-y-1.5">
+          {group.expenses.map((expense) => (
+            <li key={expense.id} className="rounded-lg bg-muted/40 p-3">
+              <div className="flex items-center gap-3">
+                <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  {formatShortDate(expense.occurred_at)}
+                </span>
+                <span className="text-sm font-medium tabular-nums">
+                  {formatCurrency(Number(expense.amount), expense.currency)}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy || disabled}
+                  onClick={() => setSingleId(singleId === expense.id ? null : expense.id)}
+                >
+                  <Tag className="size-4" />
+                  {singleId === expense.id ? "Cerrar" : "Elegir"}
+                </Button>
+              </div>
+              {singleId === expense.id && (
+                <GroupPicker
+                  categories={categories}
+                  count={1}
+                  busy={busy}
+                  onSave={(taxonomy) => save(taxonomy, [expense.id])}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <button
+        type="button"
+        onClick={toggleRule}
+        disabled={savingRule || busy || disabled}
+        className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+      >
+        <Unlink className="size-3.5" />
+        {muted ? "Volver a agrupar este comercio" : "No agrupar este comercio"}
+      </button>
     </div>
   );
 }

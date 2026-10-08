@@ -10,9 +10,12 @@ import { extractExpense, type NotificationType } from "@/lib/parser/parser-servi
 import { scheduleWebhookDelivery } from "@/lib/integrations/webhook-delivery";
 import {
   MERCHANT_MEMORY_LIMIT,
+  autoSubcategory,
   normMerchant,
   tallyMerchantMemory,
+  type MerchantMemory,
 } from "@/lib/categorize/merchant";
+import { loadMerchantRules } from "@/lib/categorize/queue";
 
 // Ventana de la PRIMERA sincronización (cuando no hay cursor previo). Configurable
 // vía SYNC_INITIAL_DAYS para hacer backfill de correos antiguos. Default 30 días.
@@ -197,6 +200,8 @@ export async function runSync(
     // Autocategorización: memoria por comercio, aprendida de tus categorizaciones
     // previas (una sola query, sin IA). merchant normalizado → subcategoría más usada.
     const merchantMemory = await buildMerchantMemory(supabase, userId);
+    // Las reglas del usuario mandan sobre lo aprendido (SPEC §18.8).
+    const merchantRules = await loadMerchantRules(supabase, userId);
 
     // Pendientes del MÁS VIEJO al MÁS NUEVO (Gmail los entrega al revés). El
     // cursor avanza en orden, así que parar en un fallo no deja huecos.
@@ -328,7 +333,11 @@ export async function runSync(
       const { error: insertError } = await supabase.from("expenses").insert({
         user_id: userId,
         payment_method_id: paymentMethodId,
-        subcategory_id: merchantMemory.get(normMerchant(parsed.merchant || "")) ?? null,
+        subcategory_id: autoSubcategory(
+          normMerchant(parsed.merchant || ""),
+          merchantMemory,
+          merchantRules,
+        ),
         amount: parsed.amount,
         currency: parsed.currency || "PEN",
         merchant: parsed.merchant || "—",
@@ -390,7 +399,7 @@ export async function runSync(
 async function buildMerchantMemory(
   supabase: SupabaseClient,
   userId: string,
-): Promise<Map<string, string>> {
+): Promise<MerchantMemory> {
   const { data } = await supabase
     .from("expenses")
     .select("merchant, subcategory_id")
