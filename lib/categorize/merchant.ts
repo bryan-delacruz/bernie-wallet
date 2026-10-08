@@ -134,6 +134,16 @@ export function autoSubcategory(
     : null;
 }
 
+/**
+ * Gastos mínimos de un comercio para que el lote rinda. Por debajo, decidir el
+ * grupo cuesta casi lo mismo que editar sus gastos de a uno: lo que el lote
+ * ahorra es repetir la misma decisión, y con dos o tres no hay casi repetición.
+ *
+ * La cola arranca filtrada por esto. No esconde nada: el conteo total sigue
+ * arriba y el filtro deja ver todo con un toque.
+ */
+export const MIN_GROUP_SIZE = 5;
+
 /** Gasto pendiente tal como lo necesita la cola (nada de medio de pago ni origen). */
 export type PendingExpense = {
   id: string;

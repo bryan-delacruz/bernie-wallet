@@ -93,17 +93,23 @@ export async function categorizeBulk(
 }
 
 /**
- * Aplica las sugerencias pendientes de toda la cola.
+ * Aplica las sugerencias pendientes de la cola, de los grupos con al menos
+ * `minGroupSize` gastos.
  *
  * Recalcula la cola en el servidor en vez de confiar en lo que mande el cliente:
  * lo que se guarda es exactamente lo que la memoria del sync sugiere ahora.
  */
-export async function applyAllSuggestions(): Promise<BulkResult> {
+export async function applyAllSuggestions(minGroupSize = 1): Promise<BulkResult> {
   const { supabase, userId } = await requireUser();
   const { groups } = await loadCategorizationQueue(userId);
 
+  // El mismo filtro que la pantalla: se aplica lo que el usuario está viendo, no
+  // lo que quedó escondido detrás del filtro.
+  const min = Number.isFinite(minGroupSize) ? Math.max(1, Math.trunc(minGroupSize)) : 1;
+
   let updated = 0;
   for (const group of groups) {
+    if (group.count < min) continue;
     // Solo lo que la app puede afirmar: "varía" y "no agrupar" se quedan afuera.
     if (group.suggestion.kind !== "memory" && group.suggestion.kind !== "pinned") continue;
     const result = await assignInBatches(
