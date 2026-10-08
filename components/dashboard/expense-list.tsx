@@ -72,32 +72,38 @@ export function ExpenseList({
             <button
               type="button"
               onClick={() => setEditing(expense)}
-              className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50 active:bg-muted"
+              className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50 active:bg-muted"
             >
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 space-y-1">
                 <p className="truncate text-sm font-medium">{expense.merchant}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>{formatShortDate(expense.occurred_at)}</span>
-                  {/* Jerarquía por peso, no por cápsulas: la subcategoría (el dato
-                      más específico) lleva píldora; categoría y medio quedan en
-                      texto. El origen solo se marca cuando es manual — "Sync" es
-                      el caso normal y no aporta. */}
+                {/* Una línea por tipo de dato: qué fue (categoría y subcategoría),
+                    cuándo, y —a la derecha, bajo el monto— con qué se pagó. Todo
+                    junto en una sola línea obligaba a leer buscando separadores. */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                   {categoryName && <span className="text-foreground/70">{categoryName}</span>}
                   <span className="rounded-full bg-muted px-2 py-0.5">
                     {expense.subcategories?.name ?? "Sin categoría"}
                   </span>
-                  {expense.payment_methods && (
-                    <span className="text-foreground/70">
-                      {TIPO_LABEL[expense.payment_methods.type] ?? expense.payment_methods.type}{" "}
-                      {expense.payment_methods.identifier ?? ""}
-                    </span>
-                  )}
-                  {expense.source === "manual" ? <span>Manual</span> : null}
                 </div>
+                {/* Quién anotó el gasto: vos o el correo del banco. Ahora que la
+                    fecha tiene línea propia hay lugar para decirlo siempre, y
+                    "Del banco" explica el origen mejor que "Sync". */}
+                <p className="text-xs text-muted-foreground">
+                  {formatShortDate(expense.occurred_at)} ·{" "}
+                  {expense.source === "manual" ? "Manual" : "Del banco"}
+                </p>
               </div>
-              <span className="shrink-0 text-sm font-semibold tabular-nums text-expense">
-                − {formatCurrency(Number(expense.amount), expense.currency)}
-              </span>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className="text-sm font-semibold tabular-nums text-expense">
+                  − {formatCurrency(Number(expense.amount), expense.currency)}
+                </span>
+                {expense.payment_methods && (
+                  <span className="text-xs text-muted-foreground">
+                    {TIPO_LABEL[expense.payment_methods.type] ?? expense.payment_methods.type}{" "}
+                    {expense.payment_methods.identifier ?? ""}
+                  </span>
+                )}
+              </div>
             </button>
           </li>
           );
