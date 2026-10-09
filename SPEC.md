@@ -190,6 +190,27 @@ Todas las tablas **excepto las de sistema** llevan `user_id` y **Row Level Secur
 - `updated_at` (timestamptz)
 - Un correo aquí se filtra de futuros syncs (no se reintenta).
 
+### 7.2.2 La subcategoría es el destino; la categoría agrupa
+
+El gasto cuelga de `subcategory_id`, no de `category_id`. La categoría existe para
+agrupar y reportar. Es el mismo modelo que usan YNAB (grupos → categorías) y Monarch
+(Tipo → Grupo → Categoría): **la hoja es el destino, el nivel de arriba agrupa**.
+
+El problema era que el formulario dejaba elegir solo la categoría y guardaba igual:
+el gasto quedaba **sin categorizar** sin que nada lo dijera, y aparecía en "Otros
+gastos" del dashboard sin explicación. Una categoría sembrada sin subcategorías
+—`Salud`, `Entretenimiento`, `Otros`— no podía contener ningún gasto.
+
+YNAB lo resuelve **bloqueando**: no se puede dejar una transacción sin categoría.
+Acá no, porque frenar el guardado frena la carga rápida, que es lo que hace que la
+gente anote. En cambio `resolveTaxonomy()` crea al paso una subcategoría
+`General` dentro de la categoría elegida, igual que ya crea categorías y
+subcategorías nuevas. El formulario lo anticipa: al elegir categoría, el campo de
+subcategoría muestra `General` como valor implícito.
+
+El gasto queda sin categoría **solo si el usuario no eligió categoría**, que es una
+decisión explícita y recuperable: ese gasto aparece en la cola de `/categorize`.
+
 ### 7.2.1 Efectivo como medio de pago
 
 Un retiro en cajero **no es un gasto**: la plata pasa de la cuenta al bolsillo, no
