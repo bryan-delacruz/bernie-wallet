@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Copy, Trash2 } from "lucide-react";
+import { ChevronRight, Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -72,38 +72,53 @@ export function ExpenseList({
             <button
               type="button"
               onClick={() => setEditing(expense)}
-              className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-muted/50 active:bg-muted"
+              /* Rejilla de dos columnas y tres filas: así el medio de pago queda a
+                 la altura de la fecha, y no flotando bajo el monto. Las dos líneas
+                 de datos leen como una sola banda. */
+              className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-4 py-3.5 text-left transition-colors hover:bg-muted/50 active:bg-muted"
             >
-              <div className="min-w-0 flex-1 space-y-1">
-                <p className="truncate text-sm font-medium">{expense.merchant}</p>
-                {/* Una línea por tipo de dato: qué fue (categoría y subcategoría),
-                    cuándo, y —a la derecha, bajo el monto— con qué se pagó. Todo
-                    junto en una sola línea obligaba a leer buscando separadores. */}
-                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  {categoryName && <span className="text-foreground/70">{categoryName}</span>}
-                  <span className="rounded-full bg-muted px-2 py-0.5">
-                    {expense.subcategories?.name ?? "Sin categoría"}
+              <p className="col-start-1 row-start-1 truncate text-sm font-medium">
+                {expense.merchant}
+              </p>
+              <span className="col-start-2 row-start-1 text-sm font-semibold tabular-nums text-expense">
+                − {formatCurrency(Number(expense.amount), expense.currency)}
+              </span>
+
+              {/* Categoría y subcategoría en el gris de la fecha: es una línea de
+                  datos, no un titular. El chevron va de grupo a hoja —en ese orden,
+                  que es el que la jerarquía tiene de verdad— y la hoja lleva el
+                  peso, así se distingue cuál es cuál sin usar color.
+                  Sin categoría va en bronce, el color que la app ya usa para lo que
+                  espera trabajo (insignia del menú, aviso del lote). */}
+              {expense.subcategories ? (
+                <p className="col-start-1 row-start-2 flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
+                  {categoryName && <span>{categoryName}</span>}
+                  <span className="inline-flex items-center gap-1">
+                    {categoryName && (
+                      <ChevronRight className="size-3 shrink-0 opacity-60" aria-hidden />
+                    )}
+                    <span className="font-medium">{expense.subcategories.name}</span>
                   </span>
-                </div>
-                {/* Quién anotó el gasto, no con qué mecanismo: o lo anotaste vos,
-                    o lo anotó Bernie leyendo el correo del banco. Por eso la
-                    etiqueta es la firma y no "Sync", que es palabra nuestra. */}
-                <p className="text-xs text-muted-foreground">
-                  {formatShortDate(expense.occurred_at)} ·{" "}
-                  {expense.source === "manual" ? "Manual" : "Bernie"}
                 </p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <span className="text-sm font-semibold tabular-nums text-expense">
-                  − {formatCurrency(Number(expense.amount), expense.currency)}
+              ) : (
+                <p className="col-start-1 row-start-2 text-xs font-medium text-[var(--chart-2)]">
+                  Sin categoría
+                </p>
+              )}
+
+              {/* Quién anotó el gasto, no con qué mecanismo: o lo anotaste vos, o lo
+                  anotó Bernie leyendo el correo del banco. Por eso la etiqueta es la
+                  firma y no "Sync", que es palabra nuestra. */}
+              <p className="col-start-1 row-start-3 text-xs text-muted-foreground">
+                {formatShortDate(expense.occurred_at)} ·{" "}
+                {expense.source === "manual" ? "Manual" : "Bernie"}
+              </p>
+              {expense.payment_methods && (
+                <span className="col-start-2 row-start-3 text-right text-xs text-muted-foreground">
+                  {TIPO_LABEL[expense.payment_methods.type] ?? expense.payment_methods.type}{" "}
+                  {expense.payment_methods.identifier ?? ""}
                 </span>
-                {expense.payment_methods && (
-                  <span className="text-xs text-muted-foreground">
-                    {TIPO_LABEL[expense.payment_methods.type] ?? expense.payment_methods.type}{" "}
-                    {expense.payment_methods.identifier ?? ""}
-                  </span>
-                )}
-              </div>
+              )}
             </button>
           </li>
           );
