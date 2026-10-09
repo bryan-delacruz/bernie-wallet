@@ -348,4 +348,35 @@ await test("reglas por comercio: cada usuario ve solo las suyas, y el token OAut
 });
 
 
+await test("suscripciones push: aisladas por usuario, y un endpoint no se duplica", async () => {
+  await as(user(A), async (tx) => {
+    await tx.query(
+      `insert into push_subscriptions (user_id, endpoint, p256dh, auth)
+       values ($1, 'https://push.test/abc', 'k', 'a')`,
+      [A],
+    );
+    assert.equal((await rows(tx, "select * from push_subscriptions")).length, 1);
+  });
+
+  await as(user(B), async (tx) => {
+    assert.equal((await rows(tx, "select * from push_subscriptions")).length, 0);
+  });
+
+  await as(oauth(A), async (tx) => {
+    assert.equal((await rows(tx, "select * from push_subscriptions")).length, 0);
+  });
+
+  // El endpoint es el navegador: una sola fila por endpoint, de quien sea.
+  await expectError(
+    db.query(
+      `insert into push_subscriptions (user_id, endpoint, p256dh, auth)
+       values ($1, 'https://push.test/abc', 'k', 'a')`,
+      [B],
+    ),
+    "23505",
+  );
+
+  await db.query(`delete from push_subscriptions`);
+});
+
 console.log(`\n${n} pruebas OK`);

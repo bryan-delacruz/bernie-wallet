@@ -516,6 +516,9 @@ y automáticamente en CI (`.github/workflows/ci.yml`) en cada PR y push a `main`
 | `SUPABASE_SECRET_KEY` | servidor | Secret key (`sb_secret_...`) solo para la entrega de webhooks y el script de registro de apps — §15. Nunca en el cliente |
 | `INTEGRATION_SECRET_KEY` | servidor | AES-256-GCM para cifrar los secretos de webhook de las apps conectadas — §15 |
 | `INTERNAL_CRON_SECRET` | servidor | Protege `/api/internal/webhooks/deliver` (lo llama pg_cron) — §15 |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | cliente | Suscribirse al push desde el navegador — §19 |
+| `VAPID_PRIVATE_KEY` | servidor | Firma VAPID de cada envío push — §19 |
+| `VAPID_SUBJECT` | servidor | `mailto:` de contacto que exige el estándar VAPID — §19 |
 
 ---
 
@@ -645,7 +648,9 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 > `ImageResponse` (billetera marfil sobre esmeralda, mismo mark que el logo):
 > `app/apple-icon.tsx` (180) + route handlers `/icon-192`, `/icon-512`,
 > `/icon-maskable`; favicon en `app/icon.svg`. Meta de iOS vía `metadata.appleWebApp`.
-> Sin service worker (no se requiere para instalar). En Configuración, sección
+> Service worker **solo para push** (`public/sw.js`, §19.2): no cachea nada ni
+> intercepta `fetch`, así que no hace falta para instalar y no puede servir una
+> versión vieja. En Configuración, sección
 > **"Instalar app"** (`InstallApp`): botón nativo vía `beforeinstallprompt` en
 > Android/Chrome, instrucciones en iOS, oculto si ya está en modo standalone.
 > **Métricas honestas en el dashboard (hito 12.1).** Tres reglas que nacen de que
@@ -1500,3 +1505,86 @@ Sync" donde se la explica; en una línea de metadatos va la firma sola.
 **Dónde se decide.** `suggestFor()` y `autoSubcategory()` en
 `lib/categorize/merchant.ts` son el único lugar donde se cruzan reglas y memoria. El
 sync y la cola llaman a las mismas funciones, así que no pueden divergir.
+
+---
+
+## 19. Notificación diaria de Bernie (hito 17)
+
+### 19.1 Para qué
+
+La app registra sola y no pide nada. El riesgo de eso es que el usuario se olvide
+de que existe: sin un momento de contacto, "tus gastos se anotan solos" termina
+siendo cierto y silencioso a la vez.
+
+Una vez al día, a las **10:00 de Lima**, Bernie saluda. No es un recordatorio de
+tarea ni un pedido: es la presencia del personaje (§16, `lib/bernie-phrases.ts`).
+Las reglas de voz ya están escritas y mandan sobre esto —sin montos, sin signos de
+exclamación, nunca una racha rota— y existen por una razón concreta: **la
+notificación se lee en la pantalla bloqueada, donde la ve cualquiera que agarre el
+teléfono**. Esa es la misma regla de privacidad de §16.2 aplicada a otro canal.
+
+### 19.2 Push del navegador, no correo
+
+El usuario eligió push. Implica un **service worker**, que §13 descartaba porque no
+hace falta para instalar la PWA. Ahora sí hace falta: sin service worker no hay Web
+Push.
+
+El service worker es **solo para push**. No cachea nada, no intercepta `fetch`, no
+sirve la app offline. Un service worker que cachea mal es peor que no tenerlo: deja
+a la gente mirando una versión vieja sin entender por qué.
+
+**Límite de iOS, que no es nuestro.** En iPhone el push solo llega si el usuario
+**instaló la app** desde Safari a la pantalla de inicio. En Safari normal no existe.
+La UI lo dice en vez de prometer algo que no va a pasar.
+
+### 19.3 Sin dependencias nuevas: push sin payload
+
+Mandar un push **con** contenido exige cifrar el payload (RFC 8291: ECDH P-256,
+HKDF y AES-128-GCM). Eso es una librería nueva (`web-push`) o criptografía a mano,
+y las dos opciones están mal: la primera rompe §4, la segunda es código delicado
+sin razón.
+
+Un push **sin payload** no se cifra. Solo lleva la firma VAPID, que es un JWT ES256
+que `node:crypto` firma en veinte líneas. El service worker recibe el aviso vacío y
+**pide la frase** a `/api/notifications/today` con la sesión del usuario antes de
+mostrarla.
+
+Sale mejor, no solo más barato: la frase se arma **en el momento de mostrarla**, con
+la racha y los pendientes de ese instante, en vez de con los de cuando el cron
+despachó. Si la red falla, el service worker muestra una frase genérica: el
+navegador exige que todo push muestre algo (`userVisibleOnly`).
+
+### 19.4 Modelo de datos (migración `0020`)
+
+- `push_subscriptions`: `user_id`, `endpoint` (único), `p256dh`, `auth`,
+  `created_at`, `failed_at`. RLS por `user_id` como toda tabla de usuario. Las
+  claves se guardan aunque hoy no se usen: son lo que haría falta para mandar
+  payload cifrado más adelante.
+- `users.daily_notification_enabled` (default `false`). **Opt-in explícito**: el
+  permiso del navegador no se pide al entrar, se pide cuando el usuario prende el
+  interruptor en Configuración. Pedir permiso de entrada es la forma más rápida de
+  que te lo nieguen para siempre.
+- `users.last_phrase_id` y `users.last_notified_on`: para no repetir frase dos días
+  seguidos ni mandar dos veces el mismo día.
+
+Una suscripción que el servicio de push rechaza con 404 o 410 está **muerta** (el
+navegador la revocó) y se borra. Cualquier otro error se marca en `failed_at` y se
+reintenta mañana.
+
+### 19.5 Despacho
+
+`POST /api/internal/notify-all`, protegido con `INTERNAL_CRON_SECRET` igual que el
+sync y los respaldos, lo llama pg_cron a las **15:00 UTC**. El sync automático de la
+mañana corre 09:50 de Lima (§9.1) justamente para que lo que Bernie diga a las 10
+sea cierto.
+
+### 19.6 Variables de entorno
+
+| Variable | Ámbito | Uso |
+|---|---|---|
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | cliente | Suscribirse desde el navegador |
+| `VAPID_PRIVATE_KEY` | servidor | Firmar el JWT de cada envío |
+| `VAPID_SUBJECT` | servidor | `mailto:` de contacto, lo exige el estándar |
+
+Se generan con `node scripts/generate-vapid.mjs`. El par es permanente: cambiarlo
+invalida **todas** las suscripciones existentes.
