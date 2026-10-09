@@ -8,6 +8,7 @@ import {
 import { ThemeToggle } from "@/components/dashboard/theme-toggle";
 import { WeekStartToggle } from "@/components/dashboard/week-start-toggle";
 import { CategorizeHintToggle } from "@/components/dashboard/categorize-hint-toggle";
+import { DailyNotification } from "@/components/dashboard/daily-notification";
 import { InstallApp } from "@/components/dashboard/install-app";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { AccountData } from "@/components/dashboard/account-data";
@@ -48,7 +49,7 @@ export default async function SettingsPage() {
     isDemoUser(user) ? null : loadConnectedApps(supabase, user.id),
     supabase
       .from("users")
-      .select("week_starts_on, categorize_hint_enabled")
+      .select("week_starts_on, categorize_hint_enabled, daily_notification_enabled")
       .eq("id", user.id)
       .maybeSingle(),
   ]);
@@ -113,6 +114,11 @@ export default async function SettingsPage() {
       <section className="space-y-3">
         <h2 className={SECTION_TITLE}>La semana empieza el</h2>
         <WeekStartToggle value={profile?.week_starts_on === "sunday" ? "sunday" : "monday"} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className={SECTION_TITLE}>El saludo de Bernie</h2>
+        <DailyNotification enabled={profile?.daily_notification_enabled === true} />
       </section>
 
       <section className="space-y-3">
