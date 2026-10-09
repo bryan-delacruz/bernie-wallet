@@ -413,7 +413,8 @@ function GroupPicker({
     setSubcategory(NO_SELECTION);
   }
 
-  const ready = subcategory.kind !== "none";
+  // Con categoría alcanza: sin subcategoría el gasto va a "General" (§7.2.2).
+  const ready = category.kind !== "none" || subcategory.kind !== "none";
 
   return (
     <div className="mt-3 space-y-3 rounded-lg bg-muted/40 p-3">
@@ -434,7 +435,7 @@ function GroupPicker({
             options={subcategories}
             value={subcategory}
             onValueChange={setSubcategory}
-            placeholder={category.kind === "none" ? "Elige categoría" : "Elige una"}
+            placeholder={category.kind === "none" ? "Elige categoría" : "General"}
             emptyMessage="Escribe para crear una"
             disabled={category.kind === "none"}
           />

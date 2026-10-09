@@ -82,7 +82,7 @@ export async function categorizeBulk(
   const resolved = await resolveTaxonomy(supabase, userId, taxonomy);
   if ("error" in resolved) return resolved;
   if (!resolved.subcategoryId) {
-    return { error: "Elige una subcategoría para aplicarla al grupo." };
+    return { error: "Elige una categoría para aplicarla al grupo." };
   }
 
   const result = await assignInBatches(supabase, userId, ids, resolved.subcategoryId);

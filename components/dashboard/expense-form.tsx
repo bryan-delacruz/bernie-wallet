@@ -197,7 +197,7 @@ export function ExpenseForm({
             options={subcategories}
             value={subcategory}
             onValueChange={setSubcategory}
-            placeholder={category.kind === "none" ? "Elige categoría" : "Sin especificar"}
+            placeholder={category.kind === "none" ? "Elige categoría" : "General"}
             emptyMessage="Escribe para crear una"
             disabled={category.kind === "none"}
           />
