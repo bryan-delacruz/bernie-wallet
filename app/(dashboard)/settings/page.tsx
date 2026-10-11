@@ -1,5 +1,6 @@
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { BankSettings } from "@/components/dashboard/bank-settings";
+import { GmailSettings, type GmailStatus } from "@/components/dashboard/gmail-settings";
 import {
   PaymentMethodsSettings,
   type BankOption,
@@ -34,6 +35,8 @@ export default async function SettingsPage() {
     { data: paymentMethods },
     connected,
     { data: profile },
+    { data: gmailToken },
+    { data: lastSync },
   ] = await Promise.all([
     supabase
       .from("system_banks")
@@ -51,7 +54,21 @@ export default async function SettingsPage() {
       .select("week_starts_on, categorize_hint_enabled")
       .eq("id", user.id)
       .maybeSingle(),
+    supabase.from("google_tokens").select("user_id").eq("user_id", user.id).maybeSingle(),
+    supabase
+      .from("sync_logs")
+      .select("error_code")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+
+  const gmailStatus: GmailStatus = !gmailToken
+    ? "disconnected"
+    : lastSync?.error_code === "gmail_auth"
+      ? "lost"
+      : "connected";
 
   const connectedIds = new Set((userBanks ?? []).map((b) => b.system_bank_id));
   const banks = (systemBanks ?? []).map((b) => ({
@@ -82,6 +99,19 @@ export default async function SettingsPage() {
         </div>
         <BankSettings banks={banks} />
       </section>
+
+      {/* La demo no tiene Gmail: es una sesión anónima sin buzón. */}
+      {!isDemoUser(user) && (
+        <section className="space-y-3">
+          <div>
+            <h2 className={SECTION_TITLE}>Gmail</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Bernie lee los correos de tus bancos para anotar tus gastos. Solo lectura.
+            </p>
+          </div>
+          <GmailSettings status={gmailStatus} email={user.email ?? ""} />
+        </section>
+      )}
 
       <section className="space-y-3">
         <div>

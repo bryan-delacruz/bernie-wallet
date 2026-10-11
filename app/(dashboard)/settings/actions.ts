@@ -265,3 +265,25 @@ export async function updateCategorizeHint(enabled: boolean): Promise<ActionResu
   revalidatePath("/activity");
   return {};
 }
+
+/**
+ * Desconecta Gmail (SPEC §19.5): revoca el permiso en Google y borra el token. Los
+ * gastos ya importados se quedan. Si Google no responde, la fila se borra igual: lo
+ * que importa es que Bernie deje de tener el token.
+ */
+export async function disconnectGmail(): Promise<ActionResult> {
+  const { supabase, userId } = await requireUser();
+
+  const { data: token } = await supabase
+    .from("google_tokens")
+    .select("encrypted_refresh_token")
+    .eq("user_id", userId)
+    .maybeSingle();
+  await revokeGoogleAccess(token?.encrypted_refresh_token ?? null);
+
+  const { error } = await supabase.from("google_tokens").delete().eq("user_id", userId);
+  if (error) return { error: "No se pudo desconectar Gmail. Intenta de nuevo." };
+
+  revalidatePath("/", "layout");
+  return {};
+}
