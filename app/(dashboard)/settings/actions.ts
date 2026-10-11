@@ -225,10 +225,10 @@ export async function deleteAccount(): Promise<ActionResult> {
   // Primero Google: que deje de tener acceso al Gmail aunque lo demás falle.
   const { data: token } = await supabase
     .from("google_tokens")
-    .select("refresh_token")
+    .select("encrypted_refresh_token")
     .eq("user_id", userId)
     .maybeSingle();
-  await revokeGoogleAccess(token?.refresh_token ?? null);
+  await revokeGoogleAccess(token?.encrypted_refresh_token ?? null);
 
   // La fila de users arrastra en cascada gastos, categorías, medios, tokens y retos.
   const { error } = await supabase.from("users").delete().eq("id", userId);
