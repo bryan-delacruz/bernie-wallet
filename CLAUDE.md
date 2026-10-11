@@ -23,11 +23,11 @@ preguntar en vez de asumir.
 ## Comandos (pnpm — no usar npm ni yarn)
 
 ```bash
-pnpm dev                 # servidor de desarrollo (puerto 3000)
+pnpm dev                 # servidor de desarrollo (puerto 3000); `predev` avisa si .env.local apunta a producción
 pnpm build               # build de producción
 pnpm lint                # eslint (flat config)
 pnpm exec tsc --noEmit   # typecheck — lo corre CI; no existe script `typecheck`
-pnpm test                # tests del parser con node:test (no hay framework de tests)
+pnpm test                # todos los lib/**/*.test.ts con node:test (no hay framework de tests)
 pnpm test:db             # migraciones + RLS + apps conectadas sobre PGlite (Postgres en memoria)
 pnpm db:new <nombre>     # nuevo archivo de migración de Supabase
 pnpm db:status           # migraciones locales vs. aplicadas en el proyecto enlazado
@@ -66,13 +66,15 @@ el Next.js del entrenamiento. Diferencias clave (lista completa en SPEC §5–6)
 
 ## Arquitectura
 
-**El pipeline de sync es el corazón de la app.** `POST /api/sync`
-(`app/api/sync/route.ts`, `runtime = "nodejs"`) corre todo el flujo en un solo request:
+**El pipeline de sync es el corazón de la app.** Vive en `lib/sync/run-sync.ts`
+(`runSync()`), y lo invocan dos rutas finas: `POST /api/sync` (botón del usuario) y
+`/api/internal/sync-all` (pg_cron, migración 0013, protegida con `INTERNAL_CRON_SECRET`,
+recorre hasta `SYNC_CRON_MAX_USERS` usuarios). Una corrida hace todo en un solo request:
 
 1. Lee el cursor (`sync_logs.last_sync_at`; primera corrida = últimos `SYNC_INITIAL_DAYS`, default 30).
 2. Arma la query de Gmail con los bancos del usuario → filas de `system_senders` (`from:` + `subject:` + `after:`), lista **todos** los ids que coinciden (listar es gratis) y filtra los `message_id` ya importados y los descartados (`sync_failures`).
 3. Procesa **del más viejo al más nuevo**, como máximo `SYNC_MAX_RESULTS` por corrida, avanzando el cursor por correo: una corrida truncada continúa sin dejar huecos.
-4. Por correo: sender+subject → `notification_type` → `extractExpense()` → buscar o crear `payment_methods` según `payment_source_type` + identificador → autocategorizar con la memoria por comercio (subcategoría más frecuente en los últimos ~2000 gastos categorizados, sin IA) → insertar en `expenses`.
+4. Por correo: sender+subject → `notification_type` → `extractExpense()` → buscar o crear `payment_methods` según `payment_source_type` + identificador → autocategorizar con `autoSubcategory()` de `lib/categorize/merchant.ts` (regla fijada por el usuario en `merchant_rules`, si no la memoria por comercio: subcategoría más frecuente en los últimos ~2000 gastos, solo si el acuerdo ≥ `MIN_AGREEMENT`; sin IA). La cola de `/categorize` usa las mismas funciones puras para que sugerencia y sync nunca discrepen → insertar en `expenses`.
 
 El manejo de fallos es deliberado y hay que preservarlo: los pasos que lanzan se
 reintentan con backoff exponencial (`MAX_RETRIES`), los correos agotados se mandan al
@@ -125,7 +127,15 @@ cuenta real. Las filas se borran a las 24 h con un job de pg_cron (migraciones
 Server Actions en el `actions.ts` de cada segmento + `revalidatePath`. `/`, `/privacy`,
 `/terms` y `/demo` son públicas — las páginas legales deben seguir siendo alcanzables
 sin login y sin JS de cliente, porque la revisión de OAuth de Google las exige
-(SPEC §14).
+(SPEC §14). `(admin)` tiene su propio guard. `/api/internal/*` son endpoints para
+máquinas autenticados con secreto compartido (`timingSafeEqual`): sync-all, entrega de
+webhooks y `backup` (lo llama `.github/workflows/backup.yml` cada noche y cifra el JSON).
+
+**Apps conectadas (SPEC §15).** Bernie actúa como proveedor OAuth para apps de
+terceros: consentimiento en `/oauth/consent`, API pública en `/api/v1/*` (con
+`openapi.json`), autenticación en `lib/integrations/client-auth.ts` (exige el claim
+`client_id`; una sesión normal de Bernie no sirve) y webhooks firmados que el sync
+encola. RLS sigue siendo la frontera: el cliente de Supabase actúa con el token de la app.
 
 ## UI
 
