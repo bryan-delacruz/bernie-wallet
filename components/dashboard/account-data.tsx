@@ -33,7 +33,7 @@ export function AccountData({ canDelete }: { canDelete: boolean }) {
           Un archivo JSON con tus gastos, categorías, medios de pago y retos. No
           incluye tu conexión con Gmail, que es una credencial y no un dato tuyo.
         </p>
-        <Button variant="ghost" size="sm" className="mt-3" render={<a href="/api/export" download />}>
+        <Button variant="ghost" size="sm" className="mt-3" nativeButton={false} render={<a href="/api/export" download />}>
           <Download className="size-4" aria-hidden />
           Descargar
         </Button>
