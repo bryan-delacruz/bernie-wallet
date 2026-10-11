@@ -25,6 +25,7 @@ export type ExpenseInitial = {
   currency: string;
   merchant: string;
   date: string; // YYYY-MM-DD
+  time: string; // HH:MM
   categoryId: string;
   subcategoryId: string;
   paymentMethodId: string;
@@ -46,6 +47,12 @@ function todayLocal(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function nowLocal(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 type ExpenseFormProps = {
@@ -161,15 +168,29 @@ export function ExpenseForm({
         />
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="date">Fecha</Label>
-        <Input
-          id="date"
-          name="date"
-          type="date"
-          defaultValue={initial?.date ?? todayLocal()}
-          required
-        />
+      {/* Fecha y hora juntas: la lista muestra las dos, así que pedirlas por
+          separado haría que la hora de un gasto a mano siempre fuera inventada. */}
+      <div className="grid grid-cols-[1fr_auto] gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="date">Fecha</Label>
+          <Input
+            id="date"
+            name="date"
+            type="date"
+            defaultValue={initial?.date ?? todayLocal()}
+            required
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="time">Hora</Label>
+          <Input
+            id="time"
+            name="time"
+            type="time"
+            defaultValue={initial?.time ?? nowLocal()}
+            required
+          />
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

@@ -5,6 +5,7 @@ import { scheduleWebhookDelivery } from "@/lib/integrations/webhook-delivery";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { resolveTaxonomy, type Taxonomy } from "@/lib/taxonomy";
+import { limaInstant } from "@/lib/format";
 
 export type ExpenseResult = { error?: string };
 
@@ -40,6 +41,10 @@ function readExpenseForm(formData: FormData):
   const amount = Number(formData.get("amount"));
   const merchant = String(formData.get("merchant") ?? "").trim();
   const dateStr = String(formData.get("date") ?? "");
+  // Hora en formato "HH:MM". Si el formulario no la manda (p. ej. una versión
+  // vieja en caché), se usa mediodía: así la fecha no "salta" de día por la zona.
+  const timeStr = String(formData.get("time") ?? "").trim();
+  const time = /^\d{2}:\d{2}$/.test(timeStr) ? timeStr : "12:00";
   const currency = String(formData.get("currency") ?? "PEN");
   const paymentMethodId = formData.get("paymentMethodId");
 
@@ -56,8 +61,7 @@ function readExpenseForm(formData: FormData):
     amount,
     currency,
     merchant,
-    // Mediodía local para evitar que la fecha "salte" de día por zona horaria.
-    occurredAt: new Date(`${dateStr}T12:00:00`).toISOString(),
+    occurredAt: limaInstant(dateStr, time),
     taxonomy: {
       categoryId: text("categoryId"),
       categoryName: text("categoryName"),

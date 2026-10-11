@@ -17,7 +17,13 @@ import {
   type PaymentMethodOption,
 } from "@/components/dashboard/expense-form";
 import { createExpense, updateExpense, deleteExpense } from "@/app/(dashboard)/activity/actions";
-import { formatCurrency, formatShortDate, toLimaDateInput } from "@/lib/format";
+import {
+  formatCurrency,
+  formatShortDate,
+  formatShortTime,
+  toLimaDateInput,
+  toLimaTimeInput,
+} from "@/lib/format";
 
 const TIPO_LABEL: Record<string, string> = {
   credit_card: "TC",
@@ -106,19 +112,24 @@ export function ExpenseList({
                 </p>
               )}
 
-              {/* Quién anotó el gasto, no con qué mecanismo: o lo anotaste vos, o lo
-                  anotó Bernie leyendo el correo del banco. Por eso la etiqueta es la
-                  firma y no "Sync", que es palabra nuestra. */}
               <p className="col-start-1 row-start-3 text-xs text-muted-foreground">
-                {formatShortDate(expense.occurred_at)} ·{" "}
-                {expense.source === "manual" ? "Manual" : "Bernie"}
+                {formatShortDate(expense.occurred_at)} {formatShortTime(expense.occurred_at)}
               </p>
+
+              {/* Columna derecha, de arriba abajo: cuánto, con qué se pagó y quién
+                  lo anotó. Las tres respuestas sobre la plata quedan juntas. */}
               {expense.payment_methods && (
-                <span className="col-start-2 row-start-3 text-right text-xs text-muted-foreground">
+                <span className="col-start-2 row-start-2 text-right text-xs text-muted-foreground">
                   {TIPO_LABEL[expense.payment_methods.type] ?? expense.payment_methods.type}{" "}
                   {expense.payment_methods.identifier ?? ""}
                 </span>
               )}
+              {/* Quién anotó el gasto, no con qué mecanismo: o lo anotaste vos, o lo
+                  anotó Bernie leyendo el correo del banco. Por eso la etiqueta es la
+                  firma y no "Sync", que es palabra nuestra. */}
+              <span className="col-start-2 row-start-3 text-right text-xs text-muted-foreground">
+                {expense.source === "manual" ? "Manual" : "Bernie"}
+              </span>
             </button>
           </li>
           );
@@ -146,6 +157,7 @@ export function ExpenseList({
                 currency: editing.currency,
                 merchant: editing.merchant,
                 date: toLimaDateInput(editing.occurred_at),
+                time: toLimaTimeInput(editing.occurred_at),
                 categoryId: editing.subcategories?.category_id ?? "",
                 subcategoryId: editing.subcategory_id ?? "",
                 paymentMethodId: editing.payment_method_id ?? "",
@@ -199,6 +211,7 @@ export function ExpenseList({
                 currency: duplicating.currency,
                 merchant: duplicating.merchant,
                 date: toLimaDateInput(new Date().toISOString()),
+                time: toLimaTimeInput(new Date().toISOString()),
                 categoryId: duplicating.subcategories?.category_id ?? "",
                 subcategoryId: duplicating.subcategory_id ?? "",
                 paymentMethodId: duplicating.payment_method_id ?? "",
