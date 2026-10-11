@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { LegalShell } from "@/components/legal/legal-shell";
 
-const UPDATED_AT = "4 de octubre de 2026";
+const UPDATED_AT = "11 de octubre de 2026";
 // Contacto público que exige Google para la política. Es un Grupo de Google
 // (buzón compartido) para no exponer el correo personal del autor; debe coincidir
 // con el correo de asistencia declarado en la pantalla de consentimiento.
@@ -33,7 +33,9 @@ export default function PrivacyPage() {
       <section>
         <h2>Qué datos leemos de tu Gmail</h2>
         <p>
-          Al conectar tu cuenta de Google, Bernie Wallet solicita el permiso{" "}
+          Conectar Gmail es <strong>opcional</strong>: para entrar a Bernie Wallet basta tu
+          cuenta de Google, y el permiso de Gmail se pide aparte, solo si activas la
+          sincronización. Si lo conectas, Bernie Wallet solicita el permiso{" "}
           <strong>gmail.readonly</strong>, que es de <strong>solo lectura</strong>. Con ese permiso:
         </p>
         <ul>
@@ -179,6 +181,11 @@ export default function PrivacyPage() {
         <h2>Cómo revocar el acceso</h2>
         <p>Puedes cortar el acceso cuando quieras, y de forma independiente:</p>
         <ul>
+          <li>
+            En <strong>Configuración → Gmail → Desconectar</strong>. Le quitamos a Bernie el
+            permiso sobre tu Gmail y borramos el token. Tus gastos ya registrados siguen en tu
+            cuenta, y tu sesión en Bernie sigue abierta.
+          </li>
           <li>
             En{" "}
             <a
