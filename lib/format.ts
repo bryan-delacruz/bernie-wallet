@@ -16,6 +16,42 @@ export function formatShortDate(iso: string): string {
   }).format(new Date(iso));
 }
 
+/**
+ * "YYYY-MM-DD" + "HH:MM" de Lima → instante ISO.
+ *
+ * Concatenar sin zona (`new Date("2026-10-11T16:45:00")`) parsea en la zona del
+ * **runtime**: en la laptop da una cosa y en Vercel —que corre en UTC— otra cinco
+ * horas distinta. Por eso el offset va escrito. Perú no tiene horario de verano,
+ * así que -05:00 vale todo el año.
+ */
+export function limaInstant(day: string, time: string): string {
+  const offset = `-${String(LIMA_OFFSET_HOURS).padStart(2, "0")}:00`;
+  return new Date(`${day}T${time}:00${offset}`).toISOString();
+}
+
+/** Hora "14:35" en horario de Lima. En 24 h: ocupa menos y no mete "a. m." en
+ *  una línea de datos que ya es angosta. */
+export function formatShortTime(iso: string): string {
+  return new Intl.DateTimeFormat("es-PE", {
+    timeZone: LIMA_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+}
+
+const limaTimeFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: LIMA_TZ,
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+/** ISO → "HH:MM" en horario de Lima (para inputs type="time"). */
+export function toLimaTimeInput(iso: string): string {
+  return limaTimeFmt.format(new Date(iso));
+}
+
 // Construir un Intl.DateTimeFormat es caro y este se llama varias veces por render
 // (los atajos de rango del dashboard): se crea una sola vez por módulo.
 const limaDayFmt = new Intl.DateTimeFormat("en-CA", {
