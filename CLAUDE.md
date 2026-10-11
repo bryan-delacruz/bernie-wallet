@@ -97,14 +97,16 @@ Los refresh tokens de Google se cifran con AES-256-GCM (`lib/crypto.ts`) en
 `google_tokens`. El acceso a Gmail es de solo lectura y limitado a remitentes conocidos.
 El índice único parcial sobre `(user_id, message_id)` es la garantía anti-duplicados.
 
-**Auth.** Google vía Supabase Auth; el mismo grant de OAuth se reutiliza para Gmail
-(`gmail.readonly`). `access_type=offline` siempre, `prompt=consent` **solo** en
-`/login?reconnect=1` — forzarlo en cada login repinta la pantalla de consentimiento y
-la de "app no verificada". Google entrega refresh token solo en la primera autorización
-o con consentimiento forzado, así que el callback sobrescribe `google_tokens` únicamente
-si llega uno nuevo. Un usuario autenticado sin fila en `users` se manda a
-`/api/auth/signout`; los perfiles se crean solo en el callback de login (`lib/seed.ts`
-siembra las categorías por defecto).
+**Auth.** El login es solo identidad: Google vía Supabase Auth con `email profile`,
+y el callback de login no toca `google_tokens`. Gmail es un permiso **aparte**
+(SPEC §19): `/api/gmail/connect` → Google (`state` + PKCE en cookie, `prompt=consent`
+siempre) → `/api/gmail/callback`, que exige que el buzón (`users/me/profile`) sea el
+mismo correo del login antes de guardar el refresh token cifrado; si no, lo revoca.
+El `redirect_uri` sale del origen del request, así que cada entorno necesita su URI
+registrada en Google Cloud Console (sin comodines). El resultado vuelve como
+`?gmail=` y lo muestra `GmailOutcomeToast`. Un usuario autenticado sin fila en
+`users` se manda a `/api/auth/signout`; los perfiles se crean solo en el callback de
+login (`lib/seed.ts` siembra las categorías por defecto).
 
 **Clientes de Supabase.** `lib/supabase/server.ts` para Server Components, route
 handlers y Server Actions, con `getCurrentUser()` deduplicado por request vía

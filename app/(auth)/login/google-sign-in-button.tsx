@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NEXT_COOKIE } from "@/lib/safe-next";
 
-const GMAIL_SCOPES =
-  "email profile https://www.googleapis.com/auth/gmail.readonly";
+// Solo identidad: Gmail es un permiso aparte que se pide al activar Bernie Sync
+// (SPEC §19). Son scopes no sensibles, así que Google no muestra el aviso de
+// "app no verificada".
+const LOGIN_SCOPES = "email profile";
 
 const ERROR_MESSAGE = "No pudimos conectar con Google. Inténtalo de nuevo.";
 
@@ -40,14 +42,9 @@ function GoogleGlyph() {
 
 export function GoogleSignInButton({
   className,
-  reconnect = false,
   next = null,
 }: {
   className?: string;
-  /** Reconexión: fuerza el consentimiento para que Google emita un refresh_token
-   *  nuevo. En un login normal se omite, porque `prompt=consent` obliga a Google a
-   *  mostrar el consentimiento y el aviso de "app no verificada" cada vez. */
-  reconnect?: boolean;
   /** Ruta interna (ya validada) a la que volver tras el callback. */
   next?: string | null;
 }) {
@@ -70,13 +67,7 @@ export function GoogleSignInButton({
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          scopes: GMAIL_SCOPES,
-          // access_type=offline pide el refresh_token; Google solo lo entrega en la
-          // primera autorización o si se fuerza el consentimiento (reconexión).
-          queryParams: {
-            access_type: "offline",
-            ...(reconnect ? { prompt: "consent" } : {}),
-          },
+          scopes: LOGIN_SCOPES,
           redirectTo: `${window.location.origin}/api/auth/callback`,
         },
       });
@@ -105,7 +96,7 @@ export function GoogleSignInButton({
         ) : (
           <GoogleGlyph />
         )}
-        {loading ? "Conectando…" : reconnect ? "Reconectar Gmail" : "Continuar con Google"}
+        {loading ? "Conectando…" : "Continuar con Google"}
       </Button>
 
       {error ? (

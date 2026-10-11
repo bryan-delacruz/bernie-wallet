@@ -33,14 +33,14 @@ const DEFAULT_ERROR = "Ocurrió un problema al iniciar sesión. Inténtalo de nu
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; reconnect?: string; next?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { error, reconnect, next: rawNext } = await searchParams;
+  const { error, next: rawNext } = await searchParams;
   // A dónde volver tras entrar (p. ej. la pantalla de consentimiento de una app).
   const next = safeNext(rawNext);
 
@@ -49,9 +49,6 @@ export default async function LoginPage({
   }
 
   const errorMessage = error ? (ERROR_MESSAGES[error] ?? DEFAULT_ERROR) : null;
-  // Reconexión: el login normal no fuerza el consentimiento, así que este es el
-  // único camino que reemite el refresh_token cuando se pierde el acceso a Gmail.
-  const isReconnect = reconnect === "1";
 
   return (
     <main className="flex flex-1 lg:grid lg:grid-cols-[55fr_45fr]">
@@ -85,12 +82,11 @@ export default async function LoginPage({
           <div className="w-full max-w-sm space-y-8 rounded-2xl bg-card p-8 text-center shadow-[0_24px_60px_-15px_rgba(0,0,0,0.45)] lg:rounded-none lg:bg-transparent lg:p-0 lg:shadow-none">
             <div className="space-y-3">
               <h1 className="font-heading text-3xl font-medium tracking-tight sm:text-4xl">
-                {isReconnect ? "Reconecta tu Gmail" : "Entra a Bernie Wallet"}
+                Entra a Bernie Wallet
               </h1>
               <p className="text-base text-muted-foreground">
-                {isReconnect
-                  ? "Vuelve a dar el permiso de lectura de correos para seguir sincronizando."
-                  : "Conecta tu Gmail para registrar tus gastos."}
+                Entra con tu cuenta de Google. Gmail lo conectas después, solo si
+                quieres que Bernie anote tus gastos por ti.
               </p>
             </div>
 
@@ -103,12 +99,12 @@ export default async function LoginPage({
               </p>
             )}
 
-            <GoogleSignInButton className="w-full" reconnect={isReconnect} next={next} />
+            <GoogleSignInButton className="w-full" next={next} />
 
             {/* Desktop: nota breve (las garantías ya viven en el panel) */}
             <p className="hidden items-center justify-center gap-1.5 text-xs text-muted-foreground lg:flex">
               <Lock className="size-3.5" />
-              Solo lectura de tu Gmail · cifrado.
+              Gmail, aparte y solo lectura · cifrado.
             </p>
 
             {/* Móvil: mini-barra de garantías */}

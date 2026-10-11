@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { RefreshCw, LogOut } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { Mail, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,10 +44,11 @@ function buildSummary({ nuevos, restantes = 0, descartados = 0, detenido }: Sync
  *  acceso a Gmail se perdió (token/permiso), abre un modal para reconectar. */
 export function SyncButton({ className }: { className?: string }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [loading, setLoading] = useState(false);
   // Mensaje del error de acceso a Gmail; su presencia abre el modal de reconexión.
   const [authError, setAuthError] = useState<string | null>(null);
-  const [signingOut, setSigningOut] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   async function sync() {
     setLoading(true);
@@ -76,13 +76,10 @@ export function SyncButton({ className }: { className?: string }) {
     }
   }
 
-  async function signOut() {
-    setSigningOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    // ?reconnect=1 fuerza prompt=consent: es lo único que hace a Google emitir un
-    // refresh_token nuevo, porque el login normal ya no lo pide.
-    router.replace("/login?reconnect=1");
+  function connectGmail() {
+    setConnecting(true);
+    // Flujo propio de Gmail (SPEC §19.3): sin cerrar sesión, y de vuelta acá.
+    window.location.assign(`/api/gmail/connect?next=${encodeURIComponent(pathname)}`);
   }
 
   return (
@@ -102,19 +99,18 @@ export function SyncButton({ className }: { className?: string }) {
       <Dialog open={authError !== null} onOpenChange={(open) => !open && setAuthError(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reconecta tu cuenta de Gmail</DialogTitle>
+            <DialogTitle>Conecta tu Gmail</DialogTitle>
             <DialogDescription>
-              Bernie se quedó sin acceso a tus correos, por eso no pudo sincronizar.
-              Para reconectarlo hay que volver a entrar con Google y dejar marcado el
-              permiso de lectura de correos. También puedes seguir sin reconectar y
-              anotar tus gastos a mano.
+              Bernie no tiene acceso a tus correos, por eso no pudo sincronizar. Al
+              conectarlo, Google te pedirá el permiso de lectura de correos: déjalo
+              marcado. También puedes seguir sin conectarlo y anotar tus gastos a mano.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <DialogClose render={<Button variant="ghost" />}>Ahora no</DialogClose>
-            <Button onClick={signOut} disabled={signingOut}>
-              <LogOut className="size-4" />
-              {signingOut ? "Abriendo…" : "Reconectar Gmail"}
+            <Button onClick={connectGmail} disabled={connecting}>
+              <Mail className="size-4" />
+              {connecting ? "Abriendo…" : "Conectar Gmail"}
             </Button>
           </DialogFooter>
         </DialogContent>

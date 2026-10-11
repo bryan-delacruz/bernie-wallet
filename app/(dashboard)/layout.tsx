@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 import { DashboardNav } from "@/components/dashboard/dashboard-nav";
 import { isDemoUser } from "@/lib/demo";
 import { AchievementCelebration } from "@/components/dashboard/achievement-celebration";
 import { GmailReconnectBanner } from "@/components/dashboard/gmail-reconnect-banner";
+import { GmailOutcomeToast } from "@/components/dashboard/gmail-outcome-toast";
 import { loadStreakContext } from "@/lib/streak-data";
 
 export default async function DashboardLayout({
@@ -39,14 +41,19 @@ export default async function DashboardLayout({
   // Si la última sincronización se quedó sin acceso a Gmail, hay que decirlo en
   // todas las páginas: con el cron corriendo solo, el usuario puede no apretar
   // "Sincronizar" en días y no entender por qué no aparecen sus gastos.
-  const { data: lastSync } = await supabase
-    .from("sync_logs")
-    .select("error_code")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const lostGmailAccess = lastSync?.error_code === "gmail_auth";
+  // Solo con token guardado: quien desconectó Gmail a propósito no tiene nada que
+  // reconectar (SPEC §9.2).
+  const [{ data: lastSync }, { data: token }] = await Promise.all([
+    supabase
+      .from("sync_logs")
+      .select("error_code")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from("google_tokens").select("user_id").eq("user_id", user.id).maybeSingle(),
+  ]);
+  const lostGmailAccess = !!token && lastSync?.error_code === "gmail_auth";
 
   return (
     <div className="min-h-screen">
@@ -54,6 +61,9 @@ export default async function DashboardLayout({
       <main className="overflow-x-clip px-5 pt-8 pb-24 md:pb-12 md:pl-[17rem]">
         <div className="mx-auto w-full max-w-5xl">
           {lostGmailAccess && <GmailReconnectBanner />}
+          <Suspense>
+            <GmailOutcomeToast />
+          </Suspense>
           {isDemoUser(user) && (
             <p className="mb-6 rounded-xl bg-[#0e7c58]/10 px-4 py-2.5 text-sm text-[#0e7c58]">
               Estás en la demo: gastos de ejemplo, sin Gmail. Tu sesión de prueba se borra en 24 horas.
