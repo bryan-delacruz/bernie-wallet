@@ -23,11 +23,11 @@ preguntar en vez de asumir.
 ## Comandos (pnpm — no usar npm ni yarn)
 
 ```bash
-pnpm dev                 # servidor de desarrollo (puerto 3000)
+pnpm dev                 # servidor de desarrollo (puerto 3000); `predev` avisa si .env.local apunta a producción
 pnpm build               # build de producción
 pnpm lint                # eslint (flat config)
 pnpm exec tsc --noEmit   # typecheck — lo corre CI; no existe script `typecheck`
-pnpm test                # tests del parser con node:test (no hay framework de tests)
+pnpm test                # todos los lib/**/*.test.ts con node:test (no hay framework de tests)
 pnpm test:db             # migraciones + RLS + apps conectadas sobre PGlite (Postgres en memoria)
 pnpm db:new <nombre>     # nuevo archivo de migración de Supabase
 pnpm db:status           # migraciones locales vs. aplicadas en el proyecto enlazado
@@ -66,13 +66,15 @@ el Next.js del entrenamiento. Diferencias clave (lista completa en SPEC §5–6)
 
 ## Arquitectura
 
-**El pipeline de sync es el corazón de la app.** `POST /api/sync`
-(`app/api/sync/route.ts`, `runtime = "nodejs"`) corre todo el flujo en un solo request:
+**El pipeline de sync es el corazón de la app.** Vive en `lib/sync/run-sync.ts`
+(`runSync()`), y lo invocan dos rutas finas: `POST /api/sync` (botón del usuario) y
+`/api/internal/sync-all` (pg_cron, migración 0013, protegida con `INTERNAL_CRON_SECRET`,
+recorre hasta `SYNC_CRON_MAX_USERS` usuarios). Una corrida hace todo en un solo request:
 
 1. Lee el cursor (`sync_logs.last_sync_at`; primera corrida = últimos `SYNC_INITIAL_DAYS`, default 30).
 2. Arma la query de Gmail con los bancos del usuario → filas de `system_senders` (`from:` + `subject:` + `after:`), lista **todos** los ids que coinciden (listar es gratis) y filtra los `message_id` ya importados y los descartados (`sync_failures`).
 3. Procesa **del más viejo al más nuevo**, como máximo `SYNC_MAX_RESULTS` por corrida, avanzando el cursor por correo: una corrida truncada continúa sin dejar huecos.
-4. Por correo: sender+subject → `notification_type` → `extractExpense()` → buscar o crear `payment_methods` según `payment_source_type` + identificador → autocategorizar con la memoria por comercio (subcategoría más frecuente en los últimos ~2000 gastos categorizados, sin IA) → insertar en `expenses`.
+4. Por correo: sender+subject → `notification_type` → `extractExpense()` → buscar o crear `payment_methods` según `payment_source_type` + identificador → autocategorizar con `autoSubcategory()` de `lib/categorize/merchant.ts` (regla fijada por el usuario en `merchant_rules`, si no la memoria por comercio: subcategoría más frecuente en los últimos ~2000 gastos, solo si el acuerdo ≥ `MIN_AGREEMENT`; sin IA). La cola de `/categorize` usa las mismas funciones puras para que sugerencia y sync nunca discrepen → insertar en `expenses`.
 
 El manejo de fallos es deliberado y hay que preservarlo: los pasos que lanzan se
 reintentan con backoff exponencial (`MAX_RETRIES`), los correos agotados se mandan al
@@ -95,14 +97,16 @@ Los refresh tokens de Google se cifran con AES-256-GCM (`lib/crypto.ts`) en
 `google_tokens`. El acceso a Gmail es de solo lectura y limitado a remitentes conocidos.
 El índice único parcial sobre `(user_id, message_id)` es la garantía anti-duplicados.
 
-**Auth.** Google vía Supabase Auth; el mismo grant de OAuth se reutiliza para Gmail
-(`gmail.readonly`). `access_type=offline` siempre, `prompt=consent` **solo** en
-`/login?reconnect=1` — forzarlo en cada login repinta la pantalla de consentimiento y
-la de "app no verificada". Google entrega refresh token solo en la primera autorización
-o con consentimiento forzado, así que el callback sobrescribe `google_tokens` únicamente
-si llega uno nuevo. Un usuario autenticado sin fila en `users` se manda a
-`/api/auth/signout`; los perfiles se crean solo en el callback de login (`lib/seed.ts`
-siembra las categorías por defecto).
+**Auth.** El login es solo identidad: Google vía Supabase Auth con `email profile`,
+y el callback de login no toca `google_tokens`. Gmail es un permiso **aparte**
+(SPEC §19): `/api/gmail/connect` → Google (`state` + PKCE en cookie, `prompt=consent`
+siempre) → `/api/gmail/callback`, que exige que el buzón (`users/me/profile`) sea el
+mismo correo del login antes de guardar el refresh token cifrado; si no, lo revoca.
+El `redirect_uri` sale del origen del request, así que cada entorno necesita su URI
+registrada en Google Cloud Console (sin comodines). El resultado vuelve como
+`?gmail=` y lo muestra `GmailOutcomeToast`. Un usuario autenticado sin fila en
+`users` se manda a `/api/auth/signout`; los perfiles se crean solo en el callback de
+login (`lib/seed.ts` siembra las categorías por defecto).
 
 **Clientes de Supabase.** `lib/supabase/server.ts` para Server Components, route
 handlers y Server Actions, con `getCurrentUser()` deduplicado por request vía
@@ -125,7 +129,15 @@ cuenta real. Las filas se borran a las 24 h con un job de pg_cron (migraciones
 Server Actions en el `actions.ts` de cada segmento + `revalidatePath`. `/`, `/privacy`,
 `/terms` y `/demo` son públicas — las páginas legales deben seguir siendo alcanzables
 sin login y sin JS de cliente, porque la revisión de OAuth de Google las exige
-(SPEC §14).
+(SPEC §14). `(admin)` tiene su propio guard. `/api/internal/*` son endpoints para
+máquinas autenticados con secreto compartido (`timingSafeEqual`): sync-all, entrega de
+webhooks y `backup` (lo llama `.github/workflows/backup.yml` cada noche y cifra el JSON).
+
+**Apps conectadas (SPEC §15).** Bernie actúa como proveedor OAuth para apps de
+terceros: consentimiento en `/oauth/consent`, API pública en `/api/v1/*` (con
+`openapi.json`), autenticación en `lib/integrations/client-auth.ts` (exige el claim
+`client_id`; una sesión normal de Bernie no sirve) y webhooks firmados que el sync
+encola. RLS sigue siendo la frontera: el cliente de Supabase actúa con el token de la app.
 
 ## UI
 

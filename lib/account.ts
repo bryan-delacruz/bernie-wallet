@@ -29,14 +29,23 @@ function serviceClient() {
 export async function revokeGoogleAccess(encryptedRefreshToken: string | null): Promise<void> {
   if (!encryptedRefreshToken) return;
   try {
-    const token = decrypt(encryptedRefreshToken);
+    await revokeGoogleToken(decrypt(encryptedRefreshToken));
+  } catch {
+    // Un token ilegible no debe bloquear el borrado de la cuenta.
+  }
+}
+
+/** Revoca un token de Google en claro. Nunca lanza: un token ya revocado o un
+ *  fallo de red no deben frenar a quien llama. */
+export async function revokeGoogleToken(token: string): Promise<void> {
+  try {
     await fetch("https://oauth2.googleapis.com/revoke", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ token }),
     });
   } catch {
-    // Un token ya revocado o ilegible no debe bloquear el borrado de la cuenta.
+    // Ver arriba.
   }
 }
 

@@ -8,7 +8,7 @@ const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
 /**
  * Error de acceso a Gmail que se resuelve reconectando la cuenta: falta el token,
  * el refresh falló, o Gmail respondió 401/403 (permiso no concedido / expirado).
- * El endpoint lo usa para sugerirle al usuario cerrar sesión y volver a entrar.
+ * El endpoint lo usa para ofrecerle al usuario conectar Gmail de nuevo (SPEC §19).
  */
 export class GmailAuthError extends Error {
   constructor(message: string) {
@@ -37,7 +37,7 @@ export async function getGmailAccessToken(
     .single();
 
   if (!row) {
-    throw new GmailAuthError("No hay token de Google. Vuelve a iniciar sesión.");
+    throw new GmailAuthError("Gmail no está conectado.");
   }
 
   const res = await fetch(TOKEN_ENDPOINT, {
@@ -57,6 +57,20 @@ export async function getGmailAccessToken(
   const json = (await res.json()) as { access_token?: string };
   if (!json.access_token) throw new Error("Gmail no devolvió un access_token.");
   return json.access_token;
+}
+
+/** Dirección del buzón dueño del token, o null si Gmail no responde. */
+export async function getGmailAddress(accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${GMAIL_API}/profile`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { emailAddress?: string };
+    return json.emailAddress ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**

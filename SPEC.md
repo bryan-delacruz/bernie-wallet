@@ -1,6 +1,6 @@
 # SPEC.md — Bernie Wallet
 
-> **Fuente de verdad (Spec-Driven Development).** Este documento manda. Ningún código puede contradecir esta spec. Si algo cambia, **primero se actualiza esta spec, luego el código**. Última actualización: 2026-10-03.
+> **Fuente de verdad (Spec-Driven Development).** Este documento manda. Ningún código puede contradecir esta spec. Si algo cambia, **primero se actualiza esta spec, luego el código**. Última actualización: 2026-10-11.
 
 ---
 
@@ -257,20 +257,14 @@ CREATE UNIQUE INDEX ON expenses (user_id, message_id) WHERE message_id IS NOT NU
 
 ## 8. Autenticación
 
-- **Login con Google vía Supabase Auth.**
-- El OAuth token de Google se **reutiliza para acceder a la Gmail API** del usuario (no se pide un segundo login).
-- Scopes solicitados: `email`, `profile`, `https://www.googleapis.com/auth/gmail.readonly`.
-- Query params del OAuth: `access_type=offline` siempre. `prompt=consent` **solo
-  en reconexión** (`/login?reconnect=1`): forzarlo en cada login obliga a Google a
-  repintar la pantalla de consentimiento y, con un scope restringido sin verificar,
-  también el aviso de "app no verificada". Sin `prompt`, Google reconoce el permiso
-  ya otorgado y salta ambas pantallas.
-- Google solo entrega `provider_refresh_token` en la **primera** autorización o
-  cuando se fuerza `prompt=consent`. El callback lo contempla: solo sobrescribe
-  `google_tokens` si llega un token nuevo, así que un login silencioso preserva el
-  guardado. Si el token se pierde, el modal de reconexión de `SyncButton` manda a
-  `/login?reconnect=1`, que sí fuerza el consentimiento y emite uno nuevo.
-- En el callback se cifra el `refresh_token` (AES-256-GCM, `node:crypto`) y se guarda en `google_tokens`.
+- **Login con Google vía Supabase Auth**, solo con scopes básicos: `email`,
+  `profile`. Son scopes no sensibles: Google no muestra el aviso de "app no
+  verificada" y, para quien ya entró antes, el login es un clic.
+- **El login no pide Gmail.** El acceso a Gmail es un permiso **aparte** que se
+  otorga recién cuando el usuario activa Bernie Sync (§19). Antes iban juntos y el
+  primer contacto con la app era la pantalla de un scope restringido.
+- El callback de login (`/api/auth/callback`) **ya no escribe `google_tokens`**: solo
+  crea/actualiza el perfil y siembra los datos por defecto (§8.1).
 - **Guard de estado inválido**: si un usuario **autenticado** no tiene fila en `users` (perfil ausente), los guards (layout del dashboard y onboarding) lo envían a `/api/auth/signout` → cierra sesión → `/login`. No se auto-crea el perfil fuera del callback de login.
 
 ### 8.1 Seed automático en el primer registro
@@ -407,8 +401,9 @@ Ese registro es también lo que hace visible el problema para el usuario: si la
 última corrida terminó en `gmail_auth`, el layout de `(dashboard)` muestra un aviso
 con un botón para reconectar. Antes eso solo aparecía al apretar "Sincronizar", y
 con el cron corriendo solo el usuario puede pasar días sin apretarlo: sus gastos
-dejan de aparecer y nada se lo explica. El botón dice **"Reconectar Gmail"**, no
-"Cerrar sesión": que por dentro haya que rehacer el login es mecánica interna.
+dejan de aparecer y nada se lo explica. El botón dice **"Reconectar Gmail"** y lleva
+al flujo de conexión de §19, no al login. El aviso solo aparece si hay una fila en
+`google_tokens`: quien desconectó Gmail a propósito no tiene nada que reconectar.
 
 Deliberadamente **no se usa un servicio externo de monitoreo**. Cada tercero es un
 encargado de tratamiento más que declarar en la política de privacidad y ante la
@@ -510,8 +505,8 @@ y automáticamente en CI (`.github/workflows/ci.yml`) en cada PR y push a `main`
 | `NEXT_PUBLIC_SITE_URL` | cliente + servidor | URL pública del sitio (OG/metadata + instalación PWA). Local: `http://localhost:3000`; prod: dominio HTTPS |
 | `NEXT_PUBLIC_SUPABASE_URL` | cliente + servidor | URL del proyecto Supabase |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | cliente + servidor | Publishable key (`sb_publishable_...`) — reemplaza a la antigua anon key; segura para el cliente |
-| `GOOGLE_CLIENT_ID` | servidor | Refrescar el access token de Gmail |
-| `GOOGLE_CLIENT_SECRET` | servidor | Refrescar el access token de Gmail |
+| `GOOGLE_CLIENT_ID` | servidor | Flujo "Conectar Gmail" (§19) y refresco del access token. Es el **mismo** cliente OAuth que usa Supabase para el login |
+| `GOOGLE_CLIENT_SECRET` | servidor | Ídem |
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | servidor | Clave AES-256-GCM (32 bytes base64) para cifrar el refresh token |
 | `SUPABASE_SECRET_KEY` | servidor | Secret key (`sb_secret_...`) solo para la entrega de webhooks y el script de registro de apps — §15. Nunca en el cliente |
 | `INTEGRATION_SECRET_KEY` | servidor | AES-256-GCM para cifrar los secretos de webhook de las apps conectadas — §15 |
@@ -715,6 +710,7 @@ Cada hito se implementa, se revisa, y recién entonces se pasa al siguiente. Ant
 14. **Gamificación y logros compartibles** — ver §16.
 15. **Panel de administración** — ver §17.
 16. **Categorización en lote** (`/categorize`) — ver §18.
+17. **Gmail como permiso aparte** — ver §19.
 
 ---
 
@@ -761,6 +757,9 @@ requisitos de **Limited Use**. Además describe:
   `google_tokens`, cifrado con AES-256-GCM;
 - que no se comparten ni venden datos a terceros, ni se usan para publicidad ni
   para entrenar modelos;
+- que el acceso a Gmail es **opcional** y aparte del login: solo se otorga al
+  activar Bernie Sync, y se puede quitar desde Configuración → "Desconectar Gmail"
+  (§19);
 - cómo revocar el acceso (`myaccount.google.com/permissions`) y cómo pedir el
   borrado de la cuenta.
 
@@ -1500,3 +1499,100 @@ Sync" donde se la explica; en una línea de metadatos va la firma sola.
 **Dónde se decide.** `suggestFor()` y `autoSubcategory()` en
 `lib/categorize/merchant.ts` son el único lugar donde se cruzan reglas y memoria. El
 sync y la cola llaman a las mismas funciones, así que no pueden divergir.
+
+---
+
+## 19. Gmail como permiso aparte (hito 17)
+
+### 19.1 El problema
+
+El login pedía `gmail.readonly` junto con el correo y el perfil. Es un scope
+**restringido**: el primer contacto con Bernie era la pantalla de consentimiento de
+Gmail y, sin la verificación de Google completa, el aviso de "app no verificada".
+Quien solo quería mirar la app o anotar a mano tenía que darle acceso a su correo
+para entrar. Y el registro manual nunca lo necesitó (§2).
+
+### 19.2 La decisión
+
+- **El login es solo identidad** (§8): Google con `email profile`.
+- **Gmail se conecta aparte**, con su propio flujo OAuth, cuando el usuario activa
+  Bernie Sync. Es incremental: el mismo cliente de Google, un consentimiento nuevo
+  solo para `gmail.readonly`.
+- **Se descartó OTP por correo como login**: es más lento que un clic de Google
+  (abrir el correo, copiar el código), exige un proveedor de correo fuera de §4 y
+  suma un punto de falla (spam, demoras). Se reconsidera si aparecen usuarios sin
+  cuenta de Google.
+
+### 19.3 Flujo "Conectar Gmail"
+
+Dos route handlers (`runtime = "nodejs"`), con `fetch` nativo y `node:crypto`, sin
+dependencias nuevas:
+
+1. **`GET /api/gmail/connect?next=<ruta>`** — exige sesión. Genera `state` aleatorio
+   y un `code_verifier` PKCE (S256), los guarda en una cookie `httpOnly`, `Secure`,
+   `SameSite=Lax`, de 10 minutos, junto con el `next` ya validado (`safeNext`).
+   Redirige a `accounts.google.com/o/oauth2/v2/auth` con:
+   - `scope=https://www.googleapis.com/auth/gmail.readonly`, `include_granted_scopes=true`;
+   - `access_type=offline` y **`prompt=consent` siempre**: conectar es una acción
+     rara y deliberada, y forzar el consentimiento es lo único que garantiza que
+     Google entregue un `refresh_token`;
+   - `login_hint=<correo del usuario>`, para que Google preseleccione la cuenta;
+   - `redirect_uri=<origen del request>/api/gmail/callback`. Sale del origen y no
+     de `NEXT_PUBLIC_SITE_URL` para que el flujo vuelva a la misma app en local, en
+     preview y en producción; Google la valida igual contra su lista autorizada.
+2. **`GET /api/gmail/callback`** — exige sesión y que el `state` coincida con la
+   cookie (si no, se rechaza: protección CSRF). Borra la cookie. Canjea el `code`
+   en el token endpoint con el `code_verifier`.
+3. **Mismo correo obligatorio.** Con el access token recién emitido se consulta
+   `GET gmail/v1/users/me/profile` y se compara `emailAddress` con el correo del
+   login (sin distinguir mayúsculas). Si **no coincide**, se revoca el token en el
+   acto y se vuelve a `next` con `?gmail=mismatch`; no se guarda nada. No hace falta
+   pedir otro scope para saber la dirección: `gmail.readonly` ya la da.
+4. Si coincide, se cifra el `refresh_token` (AES-256-GCM) y se hace `upsert` en
+   `google_tokens` con el `scope` concedido. Se vuelve a `next` con
+   `?gmail=connected`.
+5. Errores: `access_denied` (canceló) → `?gmail=denied`; sin `refresh_token` o fallo
+   del canje → `?gmail=error`. La página de destino muestra el mensaje (toast).
+
+**Configuración manual (la hace el usuario):** agregar
+`<dominio>/api/gmail/callback` (producción y `http://localhost:3000`) a las URIs de
+redirección autorizadas del cliente OAuth en Google Cloud Console. Google no acepta
+comodines: probar en un preview exige registrar la URI exacta de esa rama.
+
+### 19.4 Dónde se pide
+
+- **Onboarding**: si el usuario elige al menos un banco, aparece un paso
+  "Conectar Gmail" con la opción **"Ahora no"**. Si no elige banco, no se pide.
+  (El diseño de este paso se confirma antes de construirlo, §3.)
+- **Activity**: sin Gmail conectado, el botón "Sincronizar" se reemplaza por
+  "Conectar Gmail".
+- **Configuración**: sección Gmail con el estado (conectado / no conectado) y la
+  acción que corresponda.
+- Al volver de una reconexión, el aviso de §9.2 usa el mismo flujo.
+
+### 19.5 Desconectar Gmail
+
+Acción en Configuración: revoca el `refresh_token` en Google
+(`oauth2.googleapis.com/revoke`) y borra la fila de `google_tokens`. **Los gastos ya
+importados se quedan**; el cron deja de considerar al usuario (solo recorre a quien
+tiene fila). Revocar el token revoca el grant entero del cliente para esa cuenta;
+el login de Supabase no depende de él, así que la sesión sigue viva y el próximo
+login a lo sumo vuelve a mostrar el consentimiento básico.
+
+Si la revocación en Google falla (token ya revocado, red), la fila se borra igual:
+lo que importa es que Bernie deje de tener el token.
+
+### 19.6 Usuarios existentes
+
+No se migra nada. Quien ya tiene fila en `google_tokens` conserva su token y su
+sync sigue funcionando. El esquema no cambia: con el mismo correo obligatorio no
+hace falta guardar la dirección de Gmail.
+
+### 19.7 Riesgos
+
+- **URI de redirección sin registrar** → Google responde `redirect_uri_mismatch` y
+  nadie puede conectar. Se verifica en un preview antes de mergear.
+- **Cliente OAuth distinto** del de Supabase → los tokens de un flujo no sirven al
+  otro. `GOOGLE_CLIENT_ID` debe ser el mismo que el del proveedor Google de Supabase.
+- La verificación de Google para `gmail.readonly` **sigue siendo necesaria** (§14):
+  separar el permiso no la evita, solo la saca del primer contacto.

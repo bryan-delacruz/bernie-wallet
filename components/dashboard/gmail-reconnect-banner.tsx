@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -15,16 +14,13 @@ import { Button } from "@/components/ui/button";
  * deja grabado (SPEC §9.2).
  */
 export function GmailReconnectBanner() {
-  const router = useRouter();
+  const pathname = usePathname();
   const [working, setWorking] = useState(false);
 
-  async function reconnect() {
+  function reconnect() {
     setWorking(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    // ?reconnect=1 fuerza prompt=consent: es lo único que hace a Google emitir un
-    // refresh_token nuevo, porque el login normal ya no lo pide.
-    router.replace("/login?reconnect=1");
+    // Flujo propio de Gmail (SPEC §19.3): sin cerrar sesión, y de vuelta acá.
+    window.location.assign(`/api/gmail/connect?next=${encodeURIComponent(pathname)}`);
   }
 
   return (
