@@ -1660,6 +1660,18 @@ navegador exige que todo push muestre algo (`userVisibleOnly`).
   permiso del navegador no se pide al entrar, se pide cuando el usuario prende el
   interruptor en Configuración. Pedir permiso de entrada es la forma más rápida de
   que te lo nieguen para siempre.
+
+**La suscripción es la preferencia, y vive por dispositivo.** Cada navegador tiene
+la suya, así que tener la notificación activa en el celular no hace que llegue a la
+laptop. El control de Configuración mira **este** navegador
+(`pushManager.getSubscription()`), no la columna del usuario: si mirara la columna,
+en la laptop diría "Desactivar" sin que ese equipo esté suscrito, y apagarlo ahí
+dejaría al celular sin avisos. Cuando el usuario lo tiene activo en otro lado, el
+texto lo dice en vez de dejar la pregunta en el aire.
+
+`daily_notification_enabled` resume el estado —hay al menos un dispositivo— pero no
+decide a quién empujar: el despacho arranca por `push_subscriptions`. Apagar en un
+dispositivo borra esa fila, y la columna solo se apaga cuando no queda ninguna.
 - `users.last_phrase_id` y `users.last_notified_on`: para no repetir frase dos días
   seguidos ni mandar dos veces el mismo día.
 

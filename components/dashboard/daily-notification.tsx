@@ -51,18 +51,34 @@ function detectarSoporte(): Soporte {
   return "listo";
 }
 
+/**
+ * `enabled` dice si el usuario quiere recibir el saludo; `suscritaAqui`, si ESTE
+ * navegador está suscrito. Son cosas distintas: cada dispositivo tiene su propia
+ * suscripción, así que tener la notificación prendida en el celular no significa
+ * que la laptop vaya a recibirla.
+ */
 export function DailyNotification({ enabled }: { enabled: boolean }) {
   const [soporte, setSoporte] = useState<Soporte>("cargando");
-  const [activa, setActiva] = useState(enabled);
+  const [suscritaAqui, setSuscritaAqui] = useState(false);
+  const [enOtroDispositivo, setEnOtroDispositivo] = useState(false);
   const [pendiente, start] = useTransition();
 
-  // Lo que este navegador puede hacer solo se sabe en el cliente. La detección va
-  // en una tarea aparte, no en el cuerpo del efecto: `setState` sincrónico ahí
-  // encadena renders, y acá no hay apuro — el control aparece un frame después.
+  // Lo que este navegador puede hacer y si ya está suscrito solo se sabe en el
+  // cliente. Va en una tarea aparte, no en el cuerpo del efecto: `setState`
+  // sincrónico ahí encadena renders, y acá no hay apuro.
   useEffect(() => {
-    const id = setTimeout(() => setSoporte(detectarSoporte()), 0);
+    const id = setTimeout(async () => {
+      const detectado = detectarSoporte();
+      setSoporte(detectado);
+      if (detectado !== "listo") return;
+
+      const registro = await navigator.serviceWorker.getRegistration();
+      const suscripcion = await registro?.pushManager.getSubscription();
+      setSuscritaAqui(!!suscripcion);
+      setEnOtroDispositivo(enabled && !suscripcion);
+    }, 0);
     return () => clearTimeout(id);
-  }, []);
+  }, [enabled]);
 
   async function prender() {
     const clave = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
@@ -103,7 +119,8 @@ export function DailyNotification({ enabled }: { enabled: boolean }) {
         toast.error(resultado.error);
         return;
       }
-      setActiva(true);
+      setSuscritaAqui(true);
+      setEnOtroDispositivo(false);
       toast.success("Listo. Bernie te saluda a las 10 de la mañana.");
     });
   }
@@ -125,8 +142,8 @@ export function DailyNotification({ enabled }: { enabled: boolean }) {
         toast.error(resultado.error);
         return;
       }
-      setActiva(false);
-      toast.success("Apagado. Bernie no te escribe más.");
+      setSuscritaAqui(false);
+      toast.success("Apagado en este dispositivo.");
     });
   }
 
@@ -161,16 +178,19 @@ export function DailyNotification({ enabled }: { enabled: boolean }) {
   return (
     <div className="space-y-2">
       <Button
-        variant={activa ? "outline" : "default"}
+        variant={suscritaAqui ? "outline" : "default"}
         disabled={pendiente}
-        onClick={() => (activa ? apagar() : prender())}
+        onClick={() => (suscritaAqui ? apagar() : prender())}
       >
         <Bell className="size-4" />
-        {activa ? "Desactivar" : "Activar"}
+        {suscritaAqui ? "Desactivar aquí" : "Activar en este dispositivo"}
       </Button>
       <p className="text-xs text-muted-foreground">
-        Una vez al día, a las 10 de la mañana. Bernie no menciona montos ni comercios:
-        la notificación se lee en la pantalla bloqueada.
+        {/* Si está prendida en otro equipo, decirlo evita la pregunta obvia: por
+            qué el botón ofrece activar algo que el usuario ya activó. */}
+        {enOtroDispositivo
+          ? "La tienes activa en otro dispositivo. Cada uno se activa por separado."
+          : "Una vez al día, a las 10 de la mañana. Bernie no menciona montos ni comercios: la notificación se lee en la pantalla bloqueada."}
       </p>
     </div>
   );

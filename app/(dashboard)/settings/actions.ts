@@ -295,8 +295,11 @@ export async function enableDailyNotification(subscription: {
 }
 
 /**
- * Apaga la notificación diaria. Borra la suscripción de **este** navegador si se
- * indica; las de otros equipos quedan, pero el interruptor apagado las frena.
+ * Apaga la notificación diaria **en este dispositivo**: borra su suscripción.
+ *
+ * Cada navegador tiene la suya, así que apagarla en la laptop no puede dejar al
+ * celular sin avisos. El interruptor del usuario se apaga solo cuando ya no queda
+ * ningún dispositivo suscrito.
  */
 export async function disableDailyNotification(endpoint?: string): Promise<ActionResult> {
   const { supabase, userId } = await requireUser();
@@ -309,11 +312,18 @@ export async function disableDailyNotification(endpoint?: string): Promise<Actio
       .eq("endpoint", endpoint);
   }
 
-  const { error } = await supabase
-    .from("users")
-    .update({ daily_notification_enabled: false })
-    .eq("id", userId);
-  if (error) return { error: "No se pudo guardar la preferencia." };
+  const { count } = await supabase
+    .from("push_subscriptions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (!count) {
+    const { error } = await supabase
+      .from("users")
+      .update({ daily_notification_enabled: false })
+      .eq("id", userId);
+    if (error) return { error: "No se pudo guardar la preferencia." };
+  }
 
   revalidatePath("/settings");
   return {};
