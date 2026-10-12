@@ -265,3 +265,56 @@ export async function updateCategorizeHint(enabled: boolean): Promise<ActionResu
   revalidatePath("/activity");
   return {};
 }
+
+/** Guarda la suscripción push del navegador y prende la notificación diaria. */
+export async function enableDailyNotification(subscription: {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}): Promise<ActionResult> {
+  const { endpoint, p256dh, auth } = subscription;
+  if (!endpoint || !p256dh || !auth) return { error: "Suscripción incompleta." };
+  if (!/^https:\/\//.test(endpoint)) return { error: "Suscripción inválida." };
+
+  const { supabase, userId } = await requireUser();
+
+  // Un endpoint es un navegador: si ya existe, se reasigna por si cambió de cuenta.
+  const { error: subError } = await supabase
+    .from("push_subscriptions")
+    .upsert({ user_id: userId, endpoint, p256dh, auth, failed_at: null }, { onConflict: "endpoint" });
+  if (subError) return { error: "No se pudo guardar la suscripción." };
+
+  const { error } = await supabase
+    .from("users")
+    .update({ daily_notification_enabled: true })
+    .eq("id", userId);
+  if (error) return { error: "No se pudo guardar la preferencia." };
+
+  revalidatePath("/settings");
+  return {};
+}
+
+/**
+ * Apaga la notificación diaria. Borra la suscripción de **este** navegador si se
+ * indica; las de otros equipos quedan, pero el interruptor apagado las frena.
+ */
+export async function disableDailyNotification(endpoint?: string): Promise<ActionResult> {
+  const { supabase, userId } = await requireUser();
+
+  if (endpoint) {
+    await supabase
+      .from("push_subscriptions")
+      .delete()
+      .eq("user_id", userId)
+      .eq("endpoint", endpoint);
+  }
+
+  const { error } = await supabase
+    .from("users")
+    .update({ daily_notification_enabled: false })
+    .eq("id", userId);
+  if (error) return { error: "No se pudo guardar la preferencia." };
+
+  revalidatePath("/settings");
+  return {};
+}
