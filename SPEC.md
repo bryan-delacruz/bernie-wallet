@@ -1663,9 +1663,15 @@ navegador exige que todo push muestre algo (`userVisibleOnly`).
 - `users.last_phrase_id` y `users.last_notified_on`: para no repetir frase dos días
   seguidos ni mandar dos veces el mismo día.
 
-Una suscripción que el servicio de push rechaza con 404 o 410 está **muerta** (el
-navegador la revocó) y se borra. Cualquier otro error se marca en `failed_at` y se
-reintenta mañana.
+Una suscripción que el servicio de push rechaza con 404, 410 o 403 está **muerta**
+y se borra: las dos primeras porque el navegador la revocó, la tercera porque la
+firmó otro par de claves VAPID y ninguna firma nuestra va a servirle nunca.
+Cualquier otro error se marca en `failed_at` y se reintenta mañana.
+
+Rotar el par deja huérfanas las suscripciones existentes. Para que eso se arregle
+solo, el cliente **suelta la suscripción anterior antes de crear la nueva**: sin
+eso, `pushManager.subscribe()` rechaza cuando ya hay una de otro par, y el usuario
+que vuelve a activar se queda con la vieja sin que nada se lo diga.
 
 ### 20.5 Despacho
 
