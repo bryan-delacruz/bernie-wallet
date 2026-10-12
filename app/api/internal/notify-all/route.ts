@@ -39,12 +39,17 @@ export async function POST(request: Request) {
   });
 
   // Solo quienes prendieron el interruptor. El opt-in vive en `users`, así que el
-  // join evita empujar a quien lo apagó sin haber borrado su suscripción.
+  // filtro evita empujar a quien lo apagó sin haber borrado su suscripción.
+  //
+  // `last_notified_on` nulo es quien nunca recibió nada, y hay que incluirlo
+  // explícitamente: en SQL `null <> '2026-10-12'` no es verdadero sino nulo, así
+  // que un `neq` a secas deja afuera justo a los que esperan su primer saludo.
+  const today = limaToday();
   const { data: wanted, error } = await admin
     .from("users")
     .select("id")
     .eq("daily_notification_enabled", true)
-    .neq("last_notified_on", limaToday())
+    .or(`last_notified_on.is.null,last_notified_on.neq.${today}`)
     .limit(MAX_SUBSCRIPTIONS);
   if (error) return Response.json({ error: "no se pudo leer usuarios" }, { status: 500 });
 

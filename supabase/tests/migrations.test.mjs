@@ -379,4 +379,35 @@ await test("suscripciones push: aisladas por usuario, y un endpoint no se duplic
   await db.query(`delete from push_subscriptions`);
 });
 
+await test("notificación diaria: el que nunca recibió nada entra en el envío", async () => {
+  // `null <> 'hoy'` en SQL no es verdadero sino nulo, así que un `neq` a secas deja
+  // afuera justo a quien espera su PRIMER saludo. El filtro tiene que nombrar el nulo.
+  await db.query(`update users set daily_notification_enabled = true where id = $1`, [A]);
+
+  const soloNeq = await db.query(
+    `select id from users where daily_notification_enabled
+       and last_notified_on <> current_date`,
+  );
+  assert.equal(soloNeq.rows.length, 0, "el neq a secas no lo encuentra: ese era el bug");
+
+  const conNulo = await db.query(
+    `select id from users where daily_notification_enabled
+       and (last_notified_on is null or last_notified_on <> current_date)`,
+  );
+  assert.equal(conNulo.rows.length, 1);
+
+  // Y una vez notificado hoy, deja de entrar.
+  await db.query(`update users set last_notified_on = current_date where id = $1`, [A]);
+  const despues = await db.query(
+    `select id from users where daily_notification_enabled
+       and (last_notified_on is null or last_notified_on <> current_date)`,
+  );
+  assert.equal(despues.rows.length, 0);
+
+  await db.query(
+    `update users set daily_notification_enabled = false, last_notified_on = null where id = $1`,
+    [A],
+  );
+});
+
 console.log(`\n${n} pruebas OK`);
