@@ -512,7 +512,7 @@ y automáticamente en CI (`.github/workflows/ci.yml`) en cada PR y push a `main`
 | `INTEGRATION_SECRET_KEY` | servidor | AES-256-GCM para cifrar los secretos de webhook de las apps conectadas — §15 |
 | `INTERNAL_CRON_SECRET` | servidor | Protege `/api/internal/webhooks/deliver` (lo llama pg_cron) — §15 |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | cliente | Suscribirse al push desde el navegador — §20 |
-| `VAPID_PRIVATE_KEY` | servidor | Firma VAPID de cada envío push — §20 |
+| `VAPID_PRIVATE_KEY` | servidor | Firma VAPID de cada envío push — §20. Base64 de una línea (DER PKCS#8); también se acepta PEM |
 | `VAPID_SUBJECT` | servidor | `mailto:` de contacto que exige el estándar VAPID — §20 |
 
 ---
@@ -1684,3 +1684,10 @@ sea cierto.
 
 Se generan con `node scripts/generate-vapid.mjs`. El par es permanente: cambiarlo
 invalida **todas** las suscripciones existentes.
+
+La privada se guarda en **base64 de una sola línea** (el DER PKCS#8 crudo), no en
+PEM. Un valor con saltos de línea sobrevive mal al viaje por un panel web, un
+`.env` o el portapapeles: llega con los `\n` como texto, con comillas pegadas, o
+partido — y el error que produce (`DECODER routines::unsupported`) no dice nada de
+eso. La forma de una línea no tiene nada que romper. `signVapidToken()` igual
+acepta PEM, con comillas o con saltos escapados, para no romper lo ya configurado.
