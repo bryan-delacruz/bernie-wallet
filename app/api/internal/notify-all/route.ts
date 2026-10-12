@@ -29,7 +29,11 @@ function authorized(request: Request) {
 export async function POST(request: Request) {
   if (!authorized(request)) return new Response(null, { status: 401 });
 
-  const privateKeyPem = process.env.VAPID_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  // Vercel guarda el valor tal cual se pegó: si vino con comillas alrededor, hay
+  // que sacarlas, y los `\n` escritos como texto tienen que volver a ser saltos.
+  const privateKeyPem = process.env.VAPID_PRIVATE_KEY?.trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\\n/g, "\n");
   const subject = process.env.VAPID_SUBJECT;
   const key = process.env.SUPABASE_SECRET_KEY;
   if (!privateKeyPem || !subject || !key) return new Response(null, { status: 503 });
@@ -65,6 +69,8 @@ export async function POST(request: Request) {
   let enviados = 0;
   let muertas = 0;
   let fallidos = 0;
+  /** Primer motivo de fallo, para que la respuesta diga qué pasó y no solo cuántos. */
+  let motivo: string | null = null;
 
   for (const subscription of subscriptions ?? []) {
     const result = await sendPush(subscription.endpoint, { subject, privateKeyPem });
@@ -80,11 +86,12 @@ export async function POST(request: Request) {
       continue;
     }
     fallidos++;
+    motivo ??= result.reason;
     await admin
       .from("push_subscriptions")
       .update({ failed_at: new Date().toISOString() })
       .eq("id", subscription.id);
   }
 
-  return Response.json({ usuarios: userIds.length, enviados, muertas, fallidos });
+  return Response.json({ usuarios: userIds.length, enviados, muertas, fallidos, motivo });
 }

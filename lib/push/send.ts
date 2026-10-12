@@ -30,7 +30,19 @@ export async function sendPush(
     return { status: "failed", reason: "endpoint inválido" };
   }
 
-  const token = signVapidToken({ audience, subject, privateKeyPem });
+  // Una clave mal pegada (con comillas, o sin los saltos) hace que `createPrivateKey`
+  // lance. Eso es un problema de configuración, no de esta suscripción: se informa
+  // como fallo en vez de tumbar toda la corrida del cron.
+  let token: string;
+  try {
+    token = signVapidToken({ audience, subject, privateKeyPem });
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: `firma VAPID: ${error instanceof Error ? error.message : "clave inválida"}`,
+    };
+  }
+
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
 
   try {

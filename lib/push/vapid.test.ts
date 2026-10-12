@@ -89,3 +89,24 @@ test("el token no lleva padding ni caracteres fuera de base64url", () => {
   });
   assert.match(token, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
 });
+
+test("una clave mal pegada lanza, y el llamador la trata como fallo", () => {
+  // Es el caso real: el valor copiado a Vercel con las comillas alrededor.
+  assert.throws(() =>
+    signVapidToken({
+      audience: "https://push.example",
+      subject: "mailto:x@y.com",
+      privateKeyPem: `"${privateKeyPem}"`,
+    }),
+  );
+});
+
+test("una clave con los saltos escritos como texto se rechaza sin convertir", () => {
+  assert.throws(() =>
+    signVapidToken({
+      audience: "https://push.example",
+      subject: "mailto:x@y.com",
+      privateKeyPem: privateKeyPem.replace(/\n/g, "\\n"),
+    }),
+  );
+});
