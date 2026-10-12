@@ -55,8 +55,12 @@ export async function sendPush(
       },
     });
 
-    // 404/410 = el navegador la revocó. No es un fallo a reintentar.
-    if (response.status === 404 || response.status === 410) return { status: "gone" };
+    // 404/410 = el navegador la revocó. 403 = la firmó otro par de claves VAPID y
+    // ninguna firma nuestra va a servirle nunca. Los tres son definitivos: la
+    // suscripción se borra en vez de reintentarse todos los días.
+    if (response.status === 404 || response.status === 410 || response.status === 403) {
+      return { status: "gone" };
+    }
     if (!response.ok) return { status: "failed", reason: `HTTP ${response.status}` };
     return { status: "sent" };
   } catch (error) {

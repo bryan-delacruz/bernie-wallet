@@ -82,6 +82,11 @@ export function DailyNotification({ enabled }: { enabled: boolean }) {
     const registro = await navigator.serviceWorker.register("/sw.js");
     await navigator.serviceWorker.ready;
 
+    // Si ya hay una suscripción de un par de claves anterior, `subscribe` la
+    // rechaza en vez de reemplazarla, y el usuario queda con una que el servidor
+    // ya no puede firmar. Soltarla antes hace que rotar las claves se arregle solo.
+    await (await registro.pushManager.getSubscription())?.unsubscribe();
+
     const suscripcion = await registro.pushManager.subscribe({
       // El navegador lo exige: todo push tiene que mostrar algo.
       userVisibleOnly: true,
