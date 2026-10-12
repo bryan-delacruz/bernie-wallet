@@ -29,11 +29,9 @@ function authorized(request: Request) {
 export async function POST(request: Request) {
   if (!authorized(request)) return new Response(null, { status: 401 });
 
-  // Vercel guarda el valor tal cual se pegó: si vino con comillas alrededor, hay
-  // que sacarlas, y los `\n` escritos como texto tienen que volver a ser saltos.
-  const privateKeyPem = process.env.VAPID_PRIVATE_KEY?.trim()
-    .replace(/^["']|["']$/g, "")
-    .replace(/\\n/g, "\n");
+  // El valor llega tal cual se pegó en Vercel; `signVapidToken` tolera el PEM con
+  // comillas o con saltos escritos como texto, y la forma de una sola línea.
+  const privateKeyPem = process.env.VAPID_PRIVATE_KEY;
   const subject = process.env.VAPID_SUBJECT;
   const key = process.env.SUPABASE_SECRET_KEY;
   if (!privateKeyPem || !subject || !key) return new Response(null, { status: 503 });

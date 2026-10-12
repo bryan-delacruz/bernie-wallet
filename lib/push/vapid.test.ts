@@ -90,9 +90,9 @@ test("el token no lleva padding ni caracteres fuera de base64url", () => {
   assert.match(token, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
 });
 
-test("una clave mal pegada lanza, y el llamador la trata como fallo", () => {
-  // Es el caso real: el valor copiado a Vercel con las comillas alrededor.
-  assert.throws(() =>
+test("el PEM pegado con comillas alrededor ya no rompe", () => {
+  // Es el caso real: el valor se copió a Vercel tal como lo imprime el script.
+  assert.doesNotThrow(() =>
     signVapidToken({
       audience: "https://push.example",
       subject: "mailto:x@y.com",
@@ -101,12 +101,47 @@ test("una clave mal pegada lanza, y el llamador la trata como fallo", () => {
   );
 });
 
-test("una clave con los saltos escritos como texto se rechaza sin convertir", () => {
-  assert.throws(() =>
+test("el PEM con los saltos escritos como texto se reconstruye", () => {
+  assert.doesNotThrow(() =>
     signVapidToken({
       audience: "https://push.example",
       subject: "mailto:x@y.com",
       privateKeyPem: privateKeyPem.replace(/\n/g, "\\n"),
+    }),
+  );
+});
+
+test("una clave que no es una clave falla, y falla como error", () => {
+  assert.throws(() =>
+    signVapidToken({
+      audience: "https://push.example",
+      subject: "mailto:x@y.com",
+      privateKeyPem: "esto no es una clave",
+    }),
+  );
+});
+
+test("la clave en base64 de una línea firma igual que el PEM", () => {
+  const der = privateKey.export({ type: "pkcs8", format: "der" }).toString("base64");
+  const args = { audience: "https://push.example", subject: "mailto:x@y.com" };
+
+  const conDer = signVapidToken({ ...args, privateKeyPem: der });
+  const [header, payload, signature] = conDer.split(".");
+
+  // La firma cambia en cada llamada (ECDSA es aleatoria), así que se verifica.
+  const jose = Buffer.from(signature.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  const verifier = createVerify("SHA256");
+  verifier.update(`${header}.${payload}`);
+  assert.ok(verifier.verify(publicKey, joseToDer(jose)));
+});
+
+test("la de una línea aguanta espacios y comillas alrededor", () => {
+  const der = privateKey.export({ type: "pkcs8", format: "der" }).toString("base64");
+  assert.doesNotThrow(() =>
+    signVapidToken({
+      audience: "https://push.example",
+      subject: "mailto:x@y.com",
+      privateKeyPem: `  "${der}"  `,
     }),
   );
 });

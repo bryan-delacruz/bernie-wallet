@@ -48,6 +48,26 @@ function derToJose(der: Buffer): Buffer {
   return Buffer.concat([pad(r), pad(s)]);
 }
 
+/**
+ * Acepta la clave en PEM o en base64 de una sola línea (el DER PKCS#8 crudo).
+ *
+ * El PEM lleva saltos de línea, y un valor con saltos sobrevive mal al viaje por
+ * un `.env`, un panel web o un portapapeles: llega con los `\n` como texto, con
+ * comillas pegadas, o partido. La forma de una línea no tiene nada que romper, y
+ * es la que imprime `scripts/generate-vapid.mjs`.
+ */
+function privateKey(value: string) {
+  const limpio = value.trim().replace(/^["']|["']$/g, "");
+  if (limpio.includes("-----BEGIN")) {
+    return createPrivateKey(limpio.replace(/\\n/g, "\n"));
+  }
+  return createPrivateKey({
+    key: Buffer.from(limpio, "base64"),
+    format: "der",
+    type: "pkcs8",
+  });
+}
+
 /** Vida del token. El estándar topa en 24 h; 12 deja margen de reloj sobrado. */
 const TTL_SECONDS = 12 * 60 * 60;
 
@@ -77,7 +97,7 @@ export function signVapidToken({
 
   const signer = createSign("SHA256");
   signer.update(`${header}.${payload}`);
-  const der = signer.sign(createPrivateKey(privateKeyPem));
+  const der = signer.sign(privateKey(privateKeyPem));
 
   return `${header}.${payload}.${base64url(derToJose(der))}`;
 }
