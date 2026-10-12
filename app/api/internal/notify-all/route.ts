@@ -40,29 +40,29 @@ export async function POST(request: Request) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  // Solo quienes prendieron el interruptor. El opt-in vive en `users`, así que el
-  // filtro evita empujar a quien lo apagó sin haber borrado su suscripción.
-  //
+  // La suscripción ES la preferencia: cada dispositivo tiene la suya, y un usuario
+  // sin ninguna no recibe nada. Por eso se arranca por las suscripciones y no por
+  // el interruptor de `users`, que resume el estado pero no decide a quién empujar.
+  const { data: subscriptions, error } = await admin
+    .from("push_subscriptions")
+    .select("id, endpoint, user_id")
+    .limit(MAX_SUBSCRIPTIONS);
+  if (error) return Response.json({ error: "no se pudieron leer las suscripciones" }, { status: 500 });
+  if (!subscriptions?.length) return Response.json({ usuarios: 0, enviados: 0 });
+
   // `last_notified_on` nulo es quien nunca recibió nada, y hay que incluirlo
   // explícitamente: en SQL `null <> '2026-10-12'` no es verdadero sino nulo, así
   // que un `neq` a secas deja afuera justo a los que esperan su primer saludo.
   const today = limaToday();
-  const { data: wanted, error } = await admin
+  const { data: wanted } = await admin
     .from("users")
     .select("id")
     .eq("daily_notification_enabled", true)
-    .or(`last_notified_on.is.null,last_notified_on.neq.${today}`)
-    .limit(MAX_SUBSCRIPTIONS);
-  if (error) return Response.json({ error: "no se pudo leer usuarios" }, { status: 500 });
+    .in("id", [...new Set(subscriptions.map((s) => s.user_id))])
+    .or(`last_notified_on.is.null,last_notified_on.neq.${today}`);
 
-  const userIds = (wanted ?? []).map((u) => u.id);
-  if (!userIds.length) return Response.json({ usuarios: 0, enviados: 0 });
-
-  const { data: subscriptions } = await admin
-    .from("push_subscriptions")
-    .select("id, endpoint")
-    .in("user_id", userIds)
-    .limit(MAX_SUBSCRIPTIONS);
+  const userIds = new Set((wanted ?? []).map((u) => u.id));
+  if (!userIds.size) return Response.json({ usuarios: 0, enviados: 0 });
 
   let enviados = 0;
   let muertas = 0;
@@ -70,7 +70,8 @@ export async function POST(request: Request) {
   /** Primer motivo de fallo, para que la respuesta diga qué pasó y no solo cuántos. */
   let motivo: string | null = null;
 
-  for (const subscription of subscriptions ?? []) {
+  for (const subscription of subscriptions) {
+    if (!userIds.has(subscription.user_id)) continue;
     const result = await sendPush(subscription.endpoint, { subject, privateKeyPem });
 
     if (result.status === "sent") {
@@ -91,5 +92,5 @@ export async function POST(request: Request) {
       .eq("id", subscription.id);
   }
 
-  return Response.json({ usuarios: userIds.length, enviados, muertas, fallidos, motivo });
+  return Response.json({ usuarios: userIds.size, enviados, muertas, fallidos, motivo });
 }

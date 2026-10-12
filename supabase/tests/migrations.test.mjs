@@ -410,4 +410,40 @@ await test("notificación diaria: el que nunca recibió nada entra en el envío"
   );
 });
 
+await test("notificación diaria: apagarla en un dispositivo no calla a los otros", async () => {
+  // Cada navegador tiene su suscripción. Apagar en la laptop borra solo esa fila;
+  // el interruptor del usuario recién se apaga cuando no queda ninguna.
+  await db.query(
+    `insert into push_subscriptions (user_id, endpoint, p256dh, auth) values
+       ($1, 'https://push.test/celular', 'k', 'a'),
+       ($1, 'https://push.test/laptop', 'k', 'a')`,
+    [A],
+  );
+  await db.query(`update users set daily_notification_enabled = true where id = $1`, [A]);
+
+  await as(user(A), async (tx) => {
+    await tx.query(`delete from push_subscriptions where endpoint = 'https://push.test/laptop'`);
+    const quedan = await rows(tx, "select endpoint from push_subscriptions");
+    assert.equal(quedan.length, 1);
+    assert.equal(quedan[0].endpoint, "https://push.test/celular");
+  });
+
+  // Con una suscripción viva, el usuario sigue entrando en el envío.
+  const conUna = await db.query(
+    `select distinct u.id from users u join push_subscriptions p on p.user_id = u.id
+      where u.daily_notification_enabled`,
+  );
+  assert.equal(conUna.rows.length, 1);
+
+  // Sin ninguna, deja de entrar aunque el interruptor siga prendido.
+  await db.query(`delete from push_subscriptions where user_id = $1`, [A]);
+  const sinNinguna = await db.query(
+    `select distinct u.id from users u join push_subscriptions p on p.user_id = u.id
+      where u.daily_notification_enabled`,
+  );
+  assert.equal(sinNinguna.rows.length, 0);
+
+  await db.query(`update users set daily_notification_enabled = false where id = $1`, [A]);
+});
+
 console.log(`\n${n} pruebas OK`);
